@@ -1,6 +1,8 @@
 #include <iostream>
 #include <string>
 
+#include "commands.hpp"
+
 int main() {
     // Flush after every std::cout / std:cerr
     // so that the output is immediately visible
@@ -13,10 +15,15 @@ int main() {
         std::string input;
         std::getline(std::cin, input);
 
-        if (input == "exit 0") {
-            return 0;
+        std::string command = input.substr(0, input.find(" "));
+        std::string args = input.substr(input.find(" ") + 1);
+
+        if (commands::cmd.find(command) != commands::cmd.end()) {
+            commands::cmd[command](args);
+        } else if (command.empty()) {
+            continue;
+        } else {
+            std::cout << input << ": not found" << std::endl;
         }
-        
-        std::cout << input << ": not found" << std::endl;
     }
 }
