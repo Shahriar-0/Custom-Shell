@@ -1,7 +1,7 @@
 #include <iostream>
 #include <string>
 
-#include "commands.hpp"
+#include "shell_builtin_commands.hpp"
 
 int main() {
     // Flush after every std::cout / std:cerr
@@ -18,8 +18,9 @@ int main() {
         std::string command = input.substr(0, input.find(" "));
         std::string args = input.substr(input.find(" ") + 1);
 
-        if (commands::cmd.find(command) != commands::cmd.end()) {
-            commands::cmd[command](args);
+        if (shell_builtin_commands::shell_builtin_cmds.find(command) !=
+            shell_builtin_commands::shell_builtin_cmds.end()) {
+            shell_builtin_commands::shell_builtin_cmds[command](args);
         } else if (command.empty()) {
             continue;
         } else {
