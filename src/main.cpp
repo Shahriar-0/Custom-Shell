@@ -2,12 +2,19 @@
 #include <string>
 
 #include "shell_builtin_commands.hpp"
+#include "utils.hpp"
+#include "variables.hpp"
 
 int main() {
     // Flush after every std::cout / std:cerr
-    // so that the output is immediately visible
+    // So that the output is immediately visible
     std::cout << std::unitbuf;
     std::cerr << std::unitbuf;
+
+    const char* env = std::getenv("PATH");
+    if (env != nullptr) {
+        variables::PATHs = utils::split(env, ':');
+    }
 
     while (true) {
         std::cout << "$ ";

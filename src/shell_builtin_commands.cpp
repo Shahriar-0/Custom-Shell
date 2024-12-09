@@ -1,15 +1,14 @@
 #include "shell_builtin_commands.hpp"
+
 #include <iostream>
+
+#include "variables.hpp"
 
 namespace shell_builtin_commands {
 
 // Define the command map
 std::unordered_map<std::string, CommandFunction> shell_builtin_cmds = {
-    { EXIT, &shellExit },
-    { ECHO, &echo },
-    { HELP, &help },
-    { CLEAR, &clear },
-    { TYPE, &type },
+    {EXIT, &shellExit}, {ECHO, &echo}, {HELP, &help}, {CLEAR, &clear}, {TYPE, &type},
 };
 
 // Function implementations
@@ -46,15 +45,25 @@ int type(const std::string& args) {
         return 1;
     }
 
-    // If the command exists in shell_builtin_commands::shell_builtin_cmds
     if (shell_builtin_cmds.find(args) != shell_builtin_cmds.end()) {
+        // If the command exists in shell_builtin_commands::shell_builtin_cmds
         std::cout << args << " is a shell builtin" << std::endl;
-    } else {
-        // TODO: Check if the command exists in the PATH
+    }
+    else if (variables::PATHs.size() > 0) {
+        // If the command exists in PATH
+        for (const auto& path : variables::PATHs) {
+            std::string command_path = path + "/" + args;
+            if (std::system(command_path.c_str()) == 0) {
+                std::cout << args << " is " << command_path << std::endl;
+                return 0;
+            }
+        }
+    }
+    else {
+        // If the command does not exist
         std::cout << args << ": not found" << std::endl;
     }
-
     return 0;
 }
 
-} // namespace commands
+}  // namespace shell_builtin_commands

@@ -1,9 +1,10 @@
 #ifndef SHELL_BUILTIN_COMMANDS_HPP
 #define SHELL_BUILTIN_COMMANDS_HPP
 
+#include <functional>
 #include <string>
 #include <unordered_map>
-#include <functional>
+#include <vector>
 
 namespace shell_builtin_commands {
 
@@ -27,6 +28,6 @@ int help(const std::string& args);
 int clear(const std::string& args);
 int type(const std::string& args);
 
-} // namespace shell_builtin_commands
+}  // namespace shell_builtin_commands
 
-#endif // COMMANDS_HPP
+#endif  // COMMANDS_HPP
