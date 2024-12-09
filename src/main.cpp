@@ -3,6 +3,7 @@
 
 int main() {
   // Flush after every std::cout / std:cerr
+  // so that the output is immediately visible
   std::cout << std::unitbuf;
   std::cerr << std::unitbuf;
 
