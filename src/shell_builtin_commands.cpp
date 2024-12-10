@@ -3,7 +3,7 @@
 #include <iostream>
 #include <filesystem>
 
-#include "variables.hpp"
+
 
 namespace shell_builtin_commands {
 
@@ -59,7 +59,9 @@ int type(const std::string& args) {
             if (std::filesystem::exists(command_path) &&
                 ((std::filesystem::status(command_path).permissions() & std::filesystem::perms::owner_exec) !=
                   std::filesystem::perms::none)) {
-                std::cout << args << " is " << command_path << std::endl;
+
+
+                std::cout << args << " is " << utils::remove(command_path.string(), path) << std::endl;
                 return 0;
             }
         }

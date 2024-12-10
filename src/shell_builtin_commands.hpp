@@ -6,6 +6,9 @@
 #include <unordered_map>
 #include <vector>
 
+#include "variables.hpp"
+#include "utils.hpp"
+
 namespace shell_builtin_commands {
 
 // Command names

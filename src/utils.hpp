@@ -10,7 +10,11 @@ namespace utils {
 // Helper functions for string manipulation
 std::string trim(const std::string& str);
 std::vector<std::string> split(const std::string& s, char delimiter);
-
+std::string join(const std::vector<std::string>& strings, char delimiter);
+std::string escape(const std::string& str);
+std::string unescape(const std::string& str);
+std::string replace(const std::string& str, const std::string& from, const std::string& to);
+std::string remove(const std::string& str, const std::string& remove);
 }  // namespace utils
 
 #endif

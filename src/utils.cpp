@@ -18,4 +18,42 @@ std::string trim(const std::string& str) {
     return str.substr(first, last - first + 1);
 }
 
+std::string join(const std::vector<std::string>& strings, char delimiter) {
+    std::string result;
+    for (size_t i = 0; i < strings.size(); i++) {
+        result += strings[i];
+        if (i < strings.size() - 1) {
+            result += delimiter;
+        }
+    }
+    return result;
+}
+
+std::string escape(const std::string& str) {
+    // TODO
+}
+
+std::string unescape(const std::string& str) {
+    // TODO
+}
+
+std::string replace(const std::string& str, const std::string& from, const std::string& to) {
+    std::string result = str;
+    size_t pos = 0;
+    while ((pos = result.find(from, pos)) != std::string::npos) {
+        result.replace(pos, from.length(), to);
+        pos += to.length();
+    }
+    return result;
+}
+
+std::string remove(const std::string& str, const std::string& remove) {
+    std::string result = str;
+    size_t pos = 0;
+    while ((pos = result.find(remove, pos)) != std::string::npos) {
+        result.erase(pos, remove.length());
+    }
+    return result;
+}
+
 }  // namespace utils
