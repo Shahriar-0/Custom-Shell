@@ -36,4 +36,10 @@ std::optional<std::string> getExecutablePath(const std::string& command) {
     return std::nullopt;
 }
 
+int run(const std::string& command, const std::string& args) {
+    std::string runningCommand = command + " " + args;
+    std::system(runningCommand.c_str());
+    return 0;
+}
+
 }  // namespace executables

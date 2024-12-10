@@ -31,11 +31,15 @@ int main() {
         std::string command = input.substr(0, input.find(" "));
         std::string args = input.substr(input.find(" ") + 1);
 
+        if (command.empty()) {
+            continue;
+        }
+
         if (shell_builtin_commands::shell_builtin_cmds.find(command) !=
             shell_builtin_commands::shell_builtin_cmds.end()) {
             shell_builtin_commands::shell_builtin_cmds[command](args);
-        } else if (command.empty()) {
-            continue;
+        } else if (executables::commandExists(command)) {
+            executables::run(command, args);
         } else {
             std::cout << input << ": not found" << std::endl;
         }
