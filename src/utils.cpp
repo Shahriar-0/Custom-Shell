@@ -54,12 +54,7 @@ std::string replace(const std::string& str, const std::string& from, const std::
 }
 
 std::string remove(const std::string& str, const std::string& remove) {
-    std::string result = str;
-    size_t pos = 0;
-    while ((pos = result.find(remove, pos)) != std::string::npos) {
-        result.erase(pos, remove.length());
-    }
-    return result;
+    return replace(str, remove, "");
 }
 
 }  // namespace utils
