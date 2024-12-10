@@ -1,6 +1,7 @@
 #include "shell_builtin_commands.hpp"
 
 #include <iostream>
+#include <filesystem>
 
 #include "variables.hpp"
 
@@ -52,8 +53,12 @@ int type(const std::string& args) {
     else if (variables::PATHs.size() > 0) {
         // If the command exists in PATH
         for (const auto& path : variables::PATHs) {
-            std::string command_path = path + "/" + args;
-            if (std::system(command_path.c_str()) == 0) {
+            std::filesystem::path command_path = path + "/" + args;
+
+            // Check if the file exists and is executable
+            if (std::filesystem::exists(command_path) &&
+                ((std::filesystem::status(command_path).permissions() & std::filesystem::perms::owner_exec) !=
+                  std::filesystem::perms::none)) {
                 std::cout << args << " is " << command_path << std::endl;
                 return 0;
             }
