@@ -61,7 +61,7 @@ int type(const std::string& args) {
                   std::filesystem::perms::none)) {
 
 
-                std::cout << args << " is " << utils::remove(command_path.string(), path) << std::endl;
+                std::cout << args << " is " << utils::remove(command_path.string(), "\"") << std::endl;
                 return 0;
             }
         }
