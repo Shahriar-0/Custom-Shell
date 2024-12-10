@@ -40,8 +40,7 @@ int run(const std::string& command, const std::string& args) {
 
     // This is another solution which is not right but it is working
     // std::string runningCommand = command + " " + args;
-    // std::system(runningCommand.c_str());
-    // return 0;
+    // return std::system(runningCommand.c_str());
 
 #ifdef _WIN32
     STARTUPINFO si = {sizeof(STARTUPINFO)};
