@@ -6,6 +6,14 @@
 #include <string>
 #include <iostream>
 
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
+
+
 #include "utils.hpp"
 #include "variables.hpp"
 
