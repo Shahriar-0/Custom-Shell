@@ -19,6 +19,12 @@ std::string remove(const std::string& str, const std::string& remove);
 
 // Helper functions for command execution
 bool fileExists(const std::string& path);
+
+// Helper function for changing directory
+bool isRelativePath(const std::string& path);
+bool isAbsolutePath(const std::string& path);
+bool isHomePath(const std::string& path);
+
 }  // namespace utils
 
 #endif

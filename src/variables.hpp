@@ -11,6 +11,9 @@ namespace variables {
 extern std::vector<std::string> PATHs;
 extern std::unordered_map<std::string, std::string> ENVs;
 
+// Constants
+constexpr char HOME_DIR[] = "~";
+
 }  // namespace variables
 
 #endif

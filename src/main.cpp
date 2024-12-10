@@ -41,7 +41,7 @@ int main() {
         } else if (executables::commandExists(command)) {
             executables::run(command, args);
         } else {
-            std::cout << input << ": not found" << std::endl;
+            std::cerr << input << ": not found" << std::endl;
         }
     }
 }

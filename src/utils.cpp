@@ -61,4 +61,16 @@ bool fileExists(const std::string& path) {
     return std::filesystem::exists(path);
 }
 
+bool isRelativePath(const std::string& path) {
+    return !isAbsolutePath(path) && !isHomePath(path);
+}
+
+bool isAbsolutePath(const std::string& path) {
+    return path[0] == '/';
+}
+
+bool isHomePath(const std::string& path) {
+    return path[0] == '~';
+}
+
 }  // namespace utils
