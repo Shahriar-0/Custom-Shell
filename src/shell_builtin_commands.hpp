@@ -18,6 +18,7 @@ constexpr char ECHO[] = "echo";
 constexpr char HELP[] = "help";
 constexpr char CLEAR[] = "clear";
 constexpr char TYPE[] = "type";
+constexpr char PWD[] = "pwd";
 
 // Function type for commands
 using CommandFunction = std::function<int(const std::string&)>;
@@ -31,6 +32,7 @@ int shellExit(const std::string& args);
 int help(const std::string& args);
 int clear(const std::string& args);
 int type(const std::string& args);
+int pwd(const std::string& args);
 
 // Helper functions
 bool shellBuiltinCommandExists(const std::string& command);

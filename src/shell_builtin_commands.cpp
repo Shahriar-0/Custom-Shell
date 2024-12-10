@@ -7,7 +7,7 @@ namespace shell_builtin_commands {
 
 // Define the command map
 std::unordered_map<std::string, CommandFunction> shell_builtin_cmds = {
-    {EXIT, &shellExit}, {ECHO, &echo}, {HELP, &help}, {CLEAR, &clear}, {TYPE, &type},
+    {EXIT, &shellExit}, {ECHO, &echo}, {HELP, &help}, {CLEAR, &clear}, {TYPE, &type}, {PWD, &pwd}
 };
 
 // Function implementations
@@ -58,6 +58,11 @@ int type(const std::string& args) {
 
 bool shellBuiltinCommandExists(const std::string& command) {
     return shell_builtin_cmds.find(command) != shell_builtin_cmds.end();
+}
+
+int pwd(const std::string& args) {
+    std::cout << utils::remove(std::filesystem::current_path().string(), "\"") << std::endl;
+    return 0;
 }
 
 }  // namespace shell_builtin_commands
