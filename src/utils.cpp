@@ -31,10 +31,16 @@ std::string join(const std::vector<std::string>& strings, char delimiter) {
 
 std::string escape(const std::string& str) {
     // TODO
+    // Suppress warnings about unused variables and return
+    (void)str;
+    return "";
 }
 
 std::string unescape(const std::string& str) {
     // TODO
+    // Suppress warnings about unused variables and return
+    (void)str;
+    return "";
 }
 
 std::string replace(const std::string& str, const std::string& from, const std::string& to) {

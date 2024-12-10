@@ -11,9 +11,15 @@ int main() {
     std::cout << std::unitbuf;
     std::cerr << std::unitbuf;
 
+#ifdef _WIN32
+    const char delimiter = ';';
+#else
+    const char delimiter = ':';
+#endif
+
     const char* env = std::getenv("PATH");
     if (env != nullptr) {
-        variables::PATHs = utils::split(env, ':');
+        variables::PATHs = utils::split(env, delimiter);
     }
 
     while (true) {
