@@ -49,8 +49,10 @@ int type(const std::string& args) {
     if (shell_builtin_cmds.find(args) != shell_builtin_cmds.end()) {
         // If the command exists in shell_builtin_commands::shell_builtin_cmds
         std::cout << args << " is a shell builtin" << std::endl;
+        return 0;
     }
-    else if (variables::PATHs.size() > 0) {
+
+    if (variables::PATHs.size() > 0) {
         // If the command exists in PATH
         for (const auto& path : variables::PATHs) {
             std::filesystem::path command_path = path + "/" + args;
@@ -60,16 +62,14 @@ int type(const std::string& args) {
                 ((std::filesystem::status(command_path).permissions() & std::filesystem::perms::owner_exec) !=
                   std::filesystem::perms::none)) {
 
-
                 std::cout << args << " is " << utils::remove(command_path.string(), "\"") << std::endl;
                 return 0;
             }
         }
     }
-    else {
-        // If the command does not exist
-        std::cout << args << ": not found" << std::endl;
-    }
+
+    // If the command does not exist
+    std::cout << args << ": not found" << std::endl;
     return 0;
 }
 
