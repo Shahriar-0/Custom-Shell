@@ -1,9 +1,7 @@
 #include "shell_builtin_commands.hpp"
 
-#include <iostream>
 #include <filesystem>
-
-
+#include <iostream>
 
 namespace shell_builtin_commands {
 
@@ -46,31 +44,20 @@ int type(const std::string& args) {
         return 1;
     }
 
-    if (shell_builtin_cmds.find(args) != shell_builtin_cmds.end()) {
-        // If the command exists in shell_builtin_commands::shell_builtin_cmds
+    if (shellBuiltinCommandExists(args)) {
         std::cout << args << " is a shell builtin" << std::endl;
-        return 0;
     }
-
-    if (variables::PATHs.size() > 0) {
-        // If the command exists in PATH
-        for (const auto& path : variables::PATHs) {
-            std::filesystem::path command_path = path + "/" + args;
-
-            // Check if the file exists and is executable
-            if (std::filesystem::exists(command_path) &&
-                ((std::filesystem::status(command_path).permissions() & std::filesystem::perms::owner_exec) !=
-                  std::filesystem::perms::none)) {
-
-                std::cout << args << " is " << utils::remove(command_path.string(), "\"") << std::endl;
-                return 0;
-            }
-        }
+    else if (auto path = executables::getExecutablePath(args); path.has_value()) {
+        std::cout << args << " is " << utils::remove(path.value(), "\"") << std::endl;
     }
-
-    // If the command does not exist
-    std::cout << args << ": not found" << std::endl;
+    else {
+        std::cout << args << ": not found" << std::endl;
+    }
     return 0;
+}
+
+bool shellBuiltinCommandExists(const std::string& command) {
+    return shell_builtin_cmds.find(command) != shell_builtin_cmds.end();
 }
 
 }  // namespace shell_builtin_commands

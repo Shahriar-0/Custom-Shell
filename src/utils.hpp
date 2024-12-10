@@ -4,6 +4,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <filesystem>
 
 namespace utils {
 
@@ -15,6 +16,9 @@ std::string escape(const std::string& str);
 std::string unescape(const std::string& str);
 std::string replace(const std::string& str, const std::string& from, const std::string& to);
 std::string remove(const std::string& str, const std::string& remove);
+
+// Helper functions for command execution
+bool fileExists(const std::string& path);
 }  // namespace utils
 
 #endif

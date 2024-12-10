@@ -57,4 +57,8 @@ std::string remove(const std::string& str, const std::string& remove) {
     return replace(str, remove, "");
 }
 
+bool fileExists(const std::string& path) {
+    return std::filesystem::exists(path);
+}
+
 }  // namespace utils

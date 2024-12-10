@@ -6,8 +6,9 @@
 #include <unordered_map>
 #include <vector>
 
-#include "variables.hpp"
 #include "utils.hpp"
+#include "variables.hpp"
+#include "executables.hpp"
 
 namespace shell_builtin_commands {
 
@@ -30,6 +31,9 @@ int shellExit(const std::string& args);
 int help(const std::string& args);
 int clear(const std::string& args);
 int type(const std::string& args);
+
+// Helper functions
+bool shellBuiltinCommandExists(const std::string& command);
 
 }  // namespace shell_builtin_commands
 
