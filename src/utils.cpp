@@ -71,34 +71,47 @@ std::string removeQuotes(const std::string& str) {
 std::vector<std::string> split(const std::string& str, const std::string& delimiter) {
     std::vector<std::string> result;
     std::string token;
-    bool insideQuotes = false;
-    char quoteChar = '\0'; // To store which quote type we are handling
+    bool insideQuotes = false;  // Track if we are inside quotes
+    bool escaped = false;       // Track if the current character is escaped
+    char quoteChar = '\0';      // Store which quote type we are handling
 
     for (size_t i = 0; i < str.size(); ++i) {
         char currentChar = str[i];
 
-        if ((currentChar == '"' || currentChar == '\'') && (i == 0 || str[i - 1] != '\\')) {
+        // Handle escape character
+        if (!insideQuotes && !escaped && currentChar == '\\') {
+            escaped = true;  // Enable escape mode
+            continue;        // Skip adding the backslash to the token
+        }
+
+        // Handle quotes
+        if (!escaped && (currentChar == '"' || currentChar == '\'')) {
             if (insideQuotes && currentChar == quoteChar) {
                 insideQuotes = false;  // Closing quote
             } else if (!insideQuotes) {
-                insideQuotes = true;  // Opening quote
+                insideQuotes = true;   // Opening quote
                 quoteChar = currentChar;
             } else {
-                token += currentChar; // Add the quote if it's not the matching closing quote
+                token += currentChar;  // Add unmatched quote to the token
             }
         }
 
-        else if (!insideQuotes && str.substr(i, delimiter.size()) == delimiter) {
-            if (!token.empty()) { // Skip pushing empty tokens
+        // Handle delimiter
+        else if (!escaped && !insideQuotes && str.substr(i, delimiter.size()) == delimiter) {
+            if (!token.empty()) { // Push token only if it's non-empty
                 result.push_back(token);
                 token.clear();
             }
             i += delimiter.size() - 1; // Skip over the delimiter
         }
 
+        // Handle regular characters
         else {
             token += currentChar;
         }
+
+        // Reset escaped flag after processing the character
+        escaped = false;
     }
 
     // Add the last token if non-empty
