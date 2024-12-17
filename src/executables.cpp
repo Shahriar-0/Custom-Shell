@@ -70,12 +70,7 @@ int run(const std::string& command, const std::string& args) {
     return 0;
 
 #else
-    std::vector<std::string> arguments;
-    std::istringstream iss(args);
-    std::string arg;
-    while (iss >> arg) {
-        arguments.push_back(arg);
-    }
+    std::vector<std::string> arguments = utils::split(args, variables::COMMAND_DELIMITER);
 
     std::vector<char*> cArgs;
     cArgs.push_back(const_cast<char*>(command.c_str()));

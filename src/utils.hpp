@@ -16,6 +16,9 @@ std::string escape(const std::string& str);
 std::string unescape(const std::string& str);
 std::string replace(const std::string& str, const std::string& from, const std::string& to);
 std::string remove(const std::string& str, const std::string& remove);
+std::string removeQuotes(const std::string& str);
+std::vector<std::string> split(const std::string& str, const std::string& delimiter);
+std::vector<std::string> glob(const std::string& pattern);
 
 // Helper functions for command execution
 bool fileExists(const std::string& path);

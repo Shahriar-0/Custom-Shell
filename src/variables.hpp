@@ -13,6 +13,9 @@ extern std::unordered_map<std::string, std::string> ENVs;
 
 // Constants
 constexpr char HOME_DIR[] = "~";
+constexpr char CURRENT_DIR[] = ".";
+constexpr char PARENT_DIR[] = "..";
+constexpr char COMMAND_DELIMITER[] = " ";
 
 }  // namespace variables
 

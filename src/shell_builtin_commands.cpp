@@ -12,7 +12,14 @@ std::unordered_map<std::string, CommandFunction> shell_builtin_cmds = {
 
 // Function implementations
 int echo(const std::string& args) {
-    std::cout << args << std::endl;
+    std::vector<std::string> argsVec = utils::split(args, variables::COMMAND_DELIMITER);
+    for (const auto& arg : argsVec) {
+        std::cout << arg;
+        if (arg != argsVec.back()) {
+            std::cout << " ";
+        }
+    }
+    std::cout << std::endl;
     return 0;
 }
 
