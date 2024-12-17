@@ -69,6 +69,8 @@ std::string removeQuotes(const std::string& str) {
 }
 
 std::vector<std::string> split(const std::string& str, const std::string& delimiter) {
+#ifdef _WIN32
+    // Windows-specific implementation
     std::vector<std::string> result;
     std::string token;
     bool insideQuotes = false;  // Track if we are inside quotes
@@ -118,8 +120,16 @@ std::vector<std::string> split(const std::string& str, const std::string& delimi
     if (!token.empty()) {
         result.push_back(token);
     }
-
     return result;
+
+#else
+    // Unix-specific implementation
+    wordexp_t p;
+    wordexp(str.c_str(), &p, 0);
+    std::vector<std::string> result(p.we_wordv, p.we_wordv + p.we_wordc);
+    wordfree(&p);
+    return result;
+#endif
 }
 
 std::vector<std::string> glob(const std::string& pattern) {

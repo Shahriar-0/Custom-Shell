@@ -1,10 +1,16 @@
 #ifndef UTILS_HPP
 #define UTILS_HPP
 
+#include <filesystem>
 #include <sstream>
 #include <string>
 #include <vector>
-#include <filesystem>
+
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <wordexp.h>
+#endif
 
 namespace utils {
 
