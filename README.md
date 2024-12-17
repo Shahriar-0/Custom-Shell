@@ -1,6 +1,12 @@
-# Ideas
+# Custom Shell
 
-<!-- create a check list for ideas -->
+This is a custom shell implementation in C++ that simulates the behavior of a shell like `bash` or `zsh`.
+
+## How to use
+
+To use the custom shell, simply compile the source code and run the resulting executable.
+
+## Features
 
 - [x] Create a simple shell
   - [ ] Basic shell loop
