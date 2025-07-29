@@ -14,8 +14,8 @@
 #endif
 
 
-#include "utils.hpp"
-#include "variables.hpp"
+#include "../utils/utils.hpp"
+#include "../variables/variables.hpp"
 
 namespace executables {
 

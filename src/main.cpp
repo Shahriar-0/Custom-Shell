@@ -1,9 +1,9 @@
 #include <iostream>
 #include <string>
 
-#include "shell_builtin_commands.hpp"
-#include "utils.hpp"
-#include "variables.hpp"
+#include "builtin_commands/builtin_commands.hpp"
+#include "utils/utils.hpp"
+#include "variables/variables.hpp"
 
 int main() {
     // Flush after every std::cout / std:cerr

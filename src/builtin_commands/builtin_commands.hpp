@@ -1,5 +1,5 @@
-#ifndef SHELL_BUILTIN_COMMANDS_HPP
-#define SHELL_BUILTIN_COMMANDS_HPP
+#ifndef BUILTIN_COMMANDS_HPP
+#define BUILTIN_COMMANDS_HPP
 
 #include <functional>
 #include <string>
@@ -7,9 +7,9 @@
 #include <vector>
 #include <fstream>
 
-#include "utils.hpp"
-#include "variables.hpp"
-#include "executables.hpp"
+#include "../utils/utils.hpp"
+#include "../variables/variables.hpp"
+#include "../executables/executables.hpp"
 
 namespace shell_builtin_commands {
 
