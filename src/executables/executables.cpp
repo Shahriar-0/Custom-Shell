@@ -37,7 +37,6 @@ std::optional<std::string> getExecutablePath(const std::string& command) {
 }
 
 int run(const std::string& command, const std::string& args) {
-
     // This is another solution which is not right but it is working
     // std::string runningCommand = command + " " + args;
     // return std::system(runningCommand.c_str());
@@ -53,16 +52,16 @@ int run(const std::string& command, const std::string& args) {
     std::wstring wcmdLine(wlen, L'\0');
     MultiByteToWideChar(CP_UTF8, 0, cmdLineStr.c_str(), -1, &wcmdLine[0], wlen);
 
-    if (!CreateProcessW(nullptr,                 // Application name
-                        &wcmdLine[0],           // Command line
-                        nullptr,                 // Process attributes
-                        nullptr,                 // Thread attributes
-                        FALSE,                   // Inherit handles
-                        0,                       // Creation flags
-                        nullptr,                 // Environment
-                        nullptr,                 // Current directory
-                        &si,                     // Startup info
-                        &pi)) {                  // Process info
+    if (!CreateProcessW(nullptr,      // Application name
+                        &wcmdLine[0], // Command line
+                        nullptr,      // Process attributes
+                        nullptr,      // Thread attributes
+                        FALSE,        // Inherit handles
+                        0,            // Creation flags
+                        nullptr,      // Environment
+                        nullptr,      // Current directory
+                        &si,          // Startup info
+                        &pi)) {       // Process info
         std::cerr << "CreateProcess failed (" << GetLastError() << ").\n";
         return -1;
     }
@@ -92,12 +91,14 @@ int run(const std::string& command, const std::string& args) {
         execvp(command.c_str(), cArgs.data());
         perror("execvp failed");
         exit(EXIT_FAILURE);
-    } else if (pid > 0) {
+    }
+    else if (pid > 0) {
         // Parent process
         int status;
         waitpid(pid, &status, 0);
         return WEXITSTATUS(status);
-    } else {
+    }
+    else {
         // Fork failed
         perror("fork failed");
         return -1;
@@ -107,4 +108,4 @@ int run(const std::string& command, const std::string& args) {
 #endif
 }
 
-}  // namespace executables
+} // namespace executables

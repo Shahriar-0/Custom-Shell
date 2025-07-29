@@ -1,15 +1,15 @@
 #ifndef BUILTIN_COMMANDS_HPP
 #define BUILTIN_COMMANDS_HPP
 
+#include <fstream>
 #include <functional>
 #include <string>
 #include <unordered_map>
 #include <vector>
-#include <fstream>
 
+#include "../executables/executables.hpp"
 #include "../utils/utils.hpp"
 #include "../variables/variables.hpp"
-#include "../executables/executables.hpp"
 
 namespace shell_builtin_commands {
 
@@ -40,6 +40,6 @@ int cd(const std::string& args);
 // Helper functions
 bool shellBuiltinCommandExists(const std::string& command);
 
-}  // namespace shell_builtin_commands
+} // namespace shell_builtin_commands
 
-#endif  // COMMANDS_HPP
+#endif // COMMANDS_HPP

@@ -34,6 +34,6 @@ bool isRelativePath(const std::string& path);
 bool isAbsolutePath(const std::string& path);
 bool isHomePath(const std::string& path);
 
-}  // namespace utils
+} // namespace utils
 
 #endif

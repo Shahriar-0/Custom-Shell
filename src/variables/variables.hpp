@@ -17,6 +17,6 @@ constexpr char CURRENT_DIR[] = ".";
 constexpr char PARENT_DIR[] = "..";
 constexpr char COMMAND_DELIMITER[] = " ";
 
-}  // namespace variables
+} // namespace variables
 
 #endif

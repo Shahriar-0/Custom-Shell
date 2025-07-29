@@ -38,9 +38,11 @@ int main() {
         if (shell_builtin_commands::shell_builtin_cmds.find(command) !=
             shell_builtin_commands::shell_builtin_cmds.end()) {
             shell_builtin_commands::shell_builtin_cmds[command](args);
-        } else if (executables::commandExists(command)) {
+        }
+        else if (executables::commandExists(command)) {
             executables::run(command, args);
-        } else {
+        }
+        else {
             std::cerr << input << ": not found" << std::endl;
         }
     }

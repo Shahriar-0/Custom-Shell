@@ -73,28 +73,30 @@ std::vector<std::string> split(const std::string& str, const std::string& delimi
     // Windows-specific implementation
     std::vector<std::string> result;
     std::string token;
-    bool insideQuotes = false;  // Track if we are inside quotes
-    bool escaped = false;       // Track if the current character is escaped
-    char quoteChar = '\0';      // Store which quote type we are handling
+    bool insideQuotes = false; // Track if we are inside quotes
+    bool escaped = false;      // Track if the current character is escaped
+    char quoteChar = '\0';     // Store which quote type we are handling
 
     for (size_t i = 0; i < str.size(); ++i) {
         char currentChar = str[i];
 
         // Handle escape character
         if (!insideQuotes && !escaped && currentChar == '\\') {
-            escaped = true;  // Enable escape mode
-            continue;        // Skip adding the backslash to the token
+            escaped = true; // Enable escape mode
+            continue;       // Skip adding the backslash to the token
         }
 
         // Handle quotes
         if (!escaped && (currentChar == '"' || currentChar == '\'')) {
             if (insideQuotes && currentChar == quoteChar) {
-                insideQuotes = false;  // Closing quote
-            } else if (!insideQuotes) {
-                insideQuotes = true;   // Opening quote
+                insideQuotes = false; // Closing quote
+            }
+            else if (!insideQuotes) {
+                insideQuotes = true; // Opening quote
                 quoteChar = currentChar;
-            } else {
-                token += currentChar;  // Add unmatched quote to the token
+            }
+            else {
+                token += currentChar; // Add unmatched quote to the token
             }
         }
 
@@ -156,4 +158,4 @@ bool isHomePath(const std::string& path) {
     return path[0] == '~';
 }
 
-}  // namespace utils
+} // namespace utils

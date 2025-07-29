@@ -7,8 +7,7 @@ namespace shell_builtin_commands {
 
 // Define the command map
 std::unordered_map<std::string, CommandFunction> shell_builtin_cmds = {
-    {EXIT, &shellExit}, {ECHO, &echo}, {HELP, &help}, {CLEAR, &clear},
-    {TYPE, &type},      {PWD, &pwd},   {CD, &cd}};
+    {EXIT, &shellExit}, {ECHO, &echo}, {HELP, &help}, {CLEAR, &clear}, {TYPE, &type}, {PWD, &pwd}, {CD, &cd}};
 
 // Function implementations
 int echo(const std::string& args) {
@@ -53,9 +52,11 @@ int type(const std::string& args) {
 
     if (shellBuiltinCommandExists(args)) {
         std::cout << args << " is a shell builtin" << std::endl;
-    } else if (auto path = executables::getExecutablePath(args); path.has_value()) {
+    }
+    else if (auto path = executables::getExecutablePath(args); path.has_value()) {
         std::cout << args << " is " << utils::remove(path.value(), "\"") << std::endl;
-    } else {
+    }
+    else {
         std::cerr << args << ": not found" << std::endl;
     }
     return 0;
@@ -75,7 +76,8 @@ int cd(const std::string& args) {
         const char* home = std::getenv("HOME");
         if (home) {
             std::filesystem::current_path(home);
-        } else {
+        }
+        else {
             std::cerr << "HOME environment variable not set" << std::endl;
         }
     }
@@ -104,4 +106,4 @@ int cd(const std::string& args) {
     return 0;
 }
 
-}  // namespace shell_builtin_commands
+} // namespace shell_builtin_commands
