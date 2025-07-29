@@ -43,19 +43,26 @@ int run(const std::string& command, const std::string& args) {
     // return std::system(runningCommand.c_str());
 
 #ifdef _WIN32
-    STARTUPINFO si = {sizeof(STARTUPINFO)};
+    STARTUPINFOW si = {0};
+    si.cb = sizeof(STARTUPINFOW);
     PROCESS_INFORMATION pi;
 
-    if (!CreateProcess(nullptr,                 // Application name
-                       (LPSTR)command.c_str(),  // Command line
-                       nullptr,                 // Process attributes
-                       nullptr,                 // Thread attributes
-                       FALSE,                   // Inherit handles
-                       0,                       // Creation flags
-                       nullptr,                 // Environment
-                       nullptr,                 // Current directory
-                       &si,                     // Startup info
-                       &pi)) {                  // Process info
+    // Convert command and args to a single wstring
+    std::string cmdLineStr = command + " " + args;
+    int wlen = MultiByteToWideChar(CP_UTF8, 0, cmdLineStr.c_str(), -1, nullptr, 0);
+    std::wstring wcmdLine(wlen, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, cmdLineStr.c_str(), -1, &wcmdLine[0], wlen);
+
+    if (!CreateProcessW(nullptr,                 // Application name
+                        &wcmdLine[0],           // Command line
+                        nullptr,                 // Process attributes
+                        nullptr,                 // Thread attributes
+                        FALSE,                   // Inherit handles
+                        0,                       // Creation flags
+                        nullptr,                 // Environment
+                        nullptr,                 // Current directory
+                        &si,                     // Startup info
+                        &pi)) {                  // Process info
         std::cerr << "CreateProcess failed (" << GetLastError() << ").\n";
         return -1;
     }
@@ -97,7 +104,7 @@ int run(const std::string& command, const std::string& args) {
     }
 
     return 0;
-}
 #endif
+}
 
 }  // namespace executables
