@@ -13,14 +13,16 @@
 
 namespace shell_builtin_commands {
 
+// clang-format off
 // Command names
-constexpr char EXIT[] = "exit";
-constexpr char ECHO[] = "echo";
-constexpr char HELP[] = "help";
+constexpr char EXIT[]  = "exit";
+constexpr char ECHO[]  = "echo";
+constexpr char HELP[]  = "help";
 constexpr char CLEAR[] = "clear";
-constexpr char TYPE[] = "type";
-constexpr char PWD[] = "pwd";
-constexpr char CD[] = "cd";
+constexpr char TYPE[]  = "type";
+constexpr char PWD[]   = "pwd";
+constexpr char CD[]    = "cd";
+// clang-format on
 
 // Function type for commands
 using CommandFunction = std::function<int(const std::string&)>;

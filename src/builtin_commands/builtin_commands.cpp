@@ -9,6 +9,10 @@ namespace shell_builtin_commands {
 std::unordered_map<std::string, CommandFunction> shell_builtin_cmds = {
     {EXIT, &shellExit}, {ECHO, &echo}, {HELP, &help}, {CLEAR, &clear}, {TYPE, &type}, {PWD, &pwd}, {CD, &cd}};
 
+bool shellBuiltinCommandExists(const std::string& command) {
+    return shell_builtin_cmds.find(command) != shell_builtin_cmds.end();
+}
+
 // Function implementations
 int echo(const std::string& args) {
     std::vector<std::string> argsVec = utils::split(args, variables::COMMAND_DELIMITER);
@@ -60,10 +64,6 @@ int type(const std::string& args) {
         std::cerr << args << ": not found" << std::endl;
     }
     return 0;
-}
-
-bool shellBuiltinCommandExists(const std::string& command) {
-    return shell_builtin_cmds.find(command) != shell_builtin_cmds.end();
 }
 
 int pwd(const std::string& args) {
