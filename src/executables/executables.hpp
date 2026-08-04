@@ -13,8 +13,8 @@
 #include <unistd.h>
 #endif
 
-#include "../utils/utils.hpp"
-#include "../variables/variables.hpp"
+#include "utils/utils.hpp"
+#include "variables/variables.hpp"
 
 namespace executables {
 

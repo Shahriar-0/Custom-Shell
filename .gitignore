@@ -50,3 +50,6 @@ build-linux/
 vcpkg_installed
 
 .vscode
+*.xml
+NOTES.md
+graphify-out/

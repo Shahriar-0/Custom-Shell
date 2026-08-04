@@ -7,9 +7,9 @@
 #include <unordered_map>
 #include <vector>
 
-#include "../executables/executables.hpp"
-#include "../utils/utils.hpp"
-#include "../variables/variables.hpp"
+#include "executables/executables.hpp"
+#include "utils/utils.hpp"
+#include "variables/variables.hpp"
 
 namespace shell_builtin_commands {
 

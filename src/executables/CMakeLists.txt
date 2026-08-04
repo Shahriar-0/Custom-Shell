@@ -10,6 +10,13 @@ add_library(executables
 target_include_directories(executables
     PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/src
+)
+
+target_link_libraries(executables
+    PUBLIC
+    utils
+    variables
 )
 
 target_compile_features(executables
