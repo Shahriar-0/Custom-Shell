@@ -26,11 +26,16 @@ int main() {
         std::cout << "$ ";
 
         std::string input;
-        std::getline(std::cin, input);
+        if (!std::getline(std::cin, input)) {
+            std::cout << std::endl; // EOF (Ctrl+D) — exit cleanly instead of looping forever
+            break;
+        }
 
-        std::string command = input.substr(0, input.find(" "));
-        std::string args = input.substr(input.find(" ") + 1);
+        size_t spacePos = input.find(' ');
+        std::string command = (spacePos == std::string::npos) ? input : input.substr(0, spacePos);
+        std::string args = (spacePos == std::string::npos) ? "" : input.substr(spacePos + 1);
 
+        command = utils::trim(command);
         if (command.empty()) {
             continue;
         }
@@ -43,7 +48,7 @@ int main() {
             executables::run(command, args);
         }
         else {
-            std::cerr << input << ": not found" << std::endl;
+            std::cerr << input << ": command not found" << std::endl;
         }
     }
 }
