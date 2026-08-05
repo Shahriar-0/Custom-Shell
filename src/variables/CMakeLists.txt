@@ -10,7 +10,7 @@ add_library(variables
 target_include_directories(variables
     PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_SOURCE_DIR}/src
+    ${SRC_DIR}
 )
 
 target_compile_features(variables

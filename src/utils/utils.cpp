@@ -7,13 +7,18 @@ std::vector<std::string> split(const std::string& s, char delimiter) {
     std::stringstream ss(s);
     std::string token;
     while (std::getline(ss, token, delimiter)) {
-        result.push_back(token);
+        if (!token.empty()) {
+            result.push_back(token);
+        }
     }
     return result;
 }
 
 std::string trim(const std::string& str) {
     size_t first = str.find_first_not_of(' ');
+    if (first == std::string::npos) {
+        return ""; // all whitespace or empty
+    }
     size_t last = str.find_last_not_of(' ');
     return str.substr(first, last - first + 1);
 }
@@ -22,7 +27,7 @@ std::string join(const std::vector<std::string>& strings, char delimiter) {
     std::string result;
     for (size_t i = 0; i < strings.size(); i++) {
         result += strings[i];
-        if (i < strings.size() - 1) {
+        if (i + 1 < strings.size()) {
             result += delimiter;
         }
     }
@@ -30,20 +35,17 @@ std::string join(const std::vector<std::string>& strings, char delimiter) {
 }
 
 std::string escape(const std::string& str) {
-    // TODO
-    // Suppress warnings about unused variables and return
     (void)str;
     return "";
 }
 
 std::string unescape(const std::string& str) {
-    // TODO
-    // Suppress warnings about unused variables and return
     (void)str;
     return "";
 }
 
 std::string replace(const std::string& str, const std::string& from, const std::string& to) {
+    if (from.empty()) return str; // avoid infinite loop on empty 'from'
     std::string result = str;
     size_t pos = 0;
     while ((pos = result.find(from, pos)) != std::string::npos) {
@@ -53,91 +55,94 @@ std::string replace(const std::string& str, const std::string& from, const std::
     return result;
 }
 
-std::string remove(const std::string& str, const std::string& remove) {
-    return replace(str, remove, "");
+std::string remove(const std::string& str, const std::string& token) {
+    return replace(str, token, "");
 }
 
 std::string removeQuotes(const std::string& str) {
-    std::string res = str;
-    if (res[0] == '"' || res[0] == '\'') {
-        res = res.substr(1);
+    if (str.empty()) {
+        return str;
     }
-    if (res[res.length() - 1] == '"' || res[res.length() - 1] == '\'') {
-        res = res.substr(0, res.length() - 1);
+    std::string res = str;
+    char front = res.front();
+    if (res.size() >= 2 && (front == '"' || front == '\'') && res.back() == front) {
+        res = res.substr(1, res.size() - 2); // only strip if quotes match
     }
     return res;
 }
 
+// Quote-aware, escape-aware tokenizer. No shell expansion (no globbing,
+// no command substitution, no env expansion) — that belongs in the parser layer later.
 std::vector<std::string> split(const std::string& str, const std::string& delimiter) {
-#ifdef _WIN32
-    // Windows-specific implementation
     std::vector<std::string> result;
     std::string token;
-    bool insideQuotes = false; // Track if we are inside quotes
-    bool escaped = false;      // Track if the current character is escaped
-    char quoteChar = '\0';     // Store which quote type we are handling
+    bool insideQuotes = false;
+    bool escaped = false;
+    char quoteChar = '\0';
 
     for (size_t i = 0; i < str.size(); ++i) {
         char currentChar = str[i];
 
-        // Handle escape character
         if (!insideQuotes && !escaped && currentChar == '\\') {
-            escaped = true; // Enable escape mode
-            continue;       // Skip adding the backslash to the token
+            escaped = true;
+            continue;
         }
 
-        // Handle quotes
         if (!escaped && (currentChar == '"' || currentChar == '\'')) {
             if (insideQuotes && currentChar == quoteChar) {
-                insideQuotes = false; // Closing quote
+                insideQuotes = false;
             }
             else if (!insideQuotes) {
-                insideQuotes = true; // Opening quote
+                insideQuotes = true;
                 quoteChar = currentChar;
             }
             else {
-                token += currentChar; // Add unmatched quote to the token
+                token += currentChar;
             }
         }
-
-        // Handle delimiter
-        else if (!escaped && !insideQuotes && str.substr(i, delimiter.size()) == delimiter) {
-            if (!token.empty()) { // Push token only if it's non-empty
+        else if (!escaped && !insideQuotes && str.compare(i, delimiter.size(), delimiter) == 0) {
+            if (!token.empty()) {
                 result.push_back(token);
                 token.clear();
             }
-            i += delimiter.size() - 1; // Skip over the delimiter
+            i += delimiter.size() - 1;
         }
-
-        // Handle regular characters
         else {
             token += currentChar;
         }
 
-        // Reset escaped flag after processing the character
         escaped = false;
     }
 
-    // Add the last token if non-empty
     if (!token.empty()) {
         result.push_back(token);
     }
     return result;
-
-#else
-    // Unix-specific implementation
-    wordexp_t p;
-    wordexp(str.c_str(), &p, 0);
-    std::vector<std::string> result(p.we_wordv, p.we_wordv + p.we_wordc);
-    wordfree(&p);
-    return result;
-#endif
 }
 
+// Minimal literal glob: '*' matches any suffix within one directory level.
+// Not a real glob engine (no '?', no '[]', no recursive '**') — placeholder until parser work.
 std::vector<std::string> glob(const std::string& pattern) {
     std::vector<std::string> result;
-    for (const auto& entry : std::filesystem::directory_iterator(pattern)) {
-        result.push_back(entry.path().string());
+    std::filesystem::path patternPath(pattern);
+    std::filesystem::path dir = patternPath.has_parent_path() ? patternPath.parent_path() : ".";
+    std::string filePattern = patternPath.filename().string();
+
+    if (!std::filesystem::exists(dir) || !std::filesystem::is_directory(dir)) {
+        return result;
+    }
+
+    size_t starPos = filePattern.find('*');
+    std::string prefix = starPos == std::string::npos ? filePattern : filePattern.substr(0, starPos);
+    std::string suffix = starPos == std::string::npos ? "" : filePattern.substr(starPos + 1);
+
+    for (const auto& entry : std::filesystem::directory_iterator(dir)) {
+        std::string name = entry.path().filename().string();
+        if (name.size() >= prefix.size() + suffix.size() &&
+            name.compare(0, prefix.size(), prefix) == 0 &&
+            name.compare(name.size() - suffix.size(), suffix.size(), suffix) == 0) {
+            result.push_back(entry.path().string());
+        }
     }
     return result;
 }
@@ -151,11 +156,11 @@ bool isRelativePath(const std::string& path) {
 }
 
 bool isAbsolutePath(const std::string& path) {
-    return path[0] == '/';
+    return !path.empty() && path.front() == '/';
 }
 
 bool isHomePath(const std::string& path) {
-    return path[0] == '~';
+    return !path.empty() && path.front() == '~';
 }
 
 } // namespace utils

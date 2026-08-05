@@ -7,7 +7,7 @@
 
 namespace variables {
 
-// Global variables (declare as extern)
+// Global variables
 extern std::vector<std::string> PATHs;
 extern std::unordered_map<std::string, std::string> ENVs;
 
