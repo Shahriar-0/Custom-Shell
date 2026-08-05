@@ -5,9 +5,10 @@
 
 namespace shell_builtin_commands {
 
-// Define the command map
+// command map
 std::unordered_map<std::string, CommandFunction> shell_builtin_cmds = {
     {EXIT, &shellExit}, {ECHO, &echo}, {HELP, &help}, {CLEAR, &clear}, {TYPE, &type}, {PWD, &pwd}, {CD, &cd}};
+
 
 bool shellBuiltinCommandExists(const std::string& command) {
     return shell_builtin_cmds.find(command) != shell_builtin_cmds.end();
@@ -16,9 +17,9 @@ bool shellBuiltinCommandExists(const std::string& command) {
 // Function implementations
 int echo(const std::string& args) {
     std::vector<std::string> argsVec = utils::split(args, variables::COMMAND_DELIMITER);
-    for (const auto& arg : argsVec) {
-        std::cout << arg;
-        if (arg != argsVec.back()) {
+    for (size_t i = 0; i < argsVec.size(); ++i) {
+        std::cout << argsVec[i];
+        if (i + 1 < argsVec.size()) {
             std::cout << " ";
         }
     }
@@ -28,14 +29,21 @@ int echo(const std::string& args) {
 
 int shellExit(const std::string& args) {
     int status = 0;
-    if (!args.empty()) {
-        status = std::stoi(args);
+    std::string trimmed = utils::trim(args);
+    if (!trimmed.empty()) {
+        try {
+            status = std::stoi(trimmed);
+        }
+        catch (const std::exception&) {
+            std::cerr << "exit: numeric argument required" << std::endl;
+            status = 2; // bash convention for this error
+        }
     }
     std::exit(status);
-    return 0;
 }
 
 int help(const std::string& args) {
+    (void)args;
     std::cout << "Available commands:" << std::endl;
     for (const auto& command : shell_builtin_cmds) {
         std::cout << command.first << std::endl;
@@ -44,6 +52,7 @@ int help(const std::string& args) {
 }
 
 int clear(const std::string& args) {
+    (void)args;
     std::system("clear");
     return 0;
 }
@@ -67,6 +76,7 @@ int type(const std::string& args) {
 }
 
 int pwd(const std::string& args) {
+    (void)args;
     std::cout << utils::remove(std::filesystem::current_path().string(), "\"") << std::endl;
     return 0;
 }

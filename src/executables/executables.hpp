@@ -20,7 +20,6 @@ namespace executables {
 
 // Search for an executable
 bool commandExists(const std::string& command);
-bool isExecutable(const std::filesystem::path& path);
 bool isExecutable(const std::string& path);
 
 std::optional<std::string> getExecutablePath(const std::string& command);

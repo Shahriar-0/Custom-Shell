@@ -13,7 +13,7 @@ add_library(builtin_commands
 target_include_directories(builtin_commands
     PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_SOURCE_DIR}/src
+    ${SRC_DIR}
 )
 
 target_link_libraries(builtin_commands

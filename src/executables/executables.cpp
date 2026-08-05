@@ -3,30 +3,13 @@
 namespace executables {
 
 bool isExecutable(const std::string& path) {
-    return utils::fileExists(path) &&
-           ((std::filesystem::status(path).permissions() & std::filesystem::perms::owner_exec) !=
-            std::filesystem::perms::none);
-}
-
-bool isExecutable(const std::filesystem::path& path) { return isExecutable(path.string()); }
-
-bool commandExists(const std::string& command) {
-    if (variables::PATHs.size() > 0) {
-        std::string command_path;
-        for (const auto& path : variables::PATHs) {
-            command_path = path + "/" + command;
-            if (isExecutable(command_path)) {
-                return true;
-            }
-        }
-    }
-    return false;
+    if (!utils::fileExists(path)) return false;
+    auto status = std::filesystem::status(path);
+    return std::filesystem::is_regular_file(status) &&
+           (status.permissions() & std::filesystem::perms::owner_exec) != std::filesystem::perms::none;
 }
 
 std::optional<std::string> getExecutablePath(const std::string& command) {
-    if (variables::PATHs.empty()) {
-        return std::nullopt;
-    }
     for (const auto& path : variables::PATHs) {
         std::string command_path = path + "/" + command;
         if (isExecutable(command_path)) {
@@ -36,14 +19,19 @@ std::optional<std::string> getExecutablePath(const std::string& command) {
     return std::nullopt;
 }
 
+bool commandExists(const std::string& command) {
+    return getExecutablePath(command).has_value();
+}
+
 int run(const std::string& command, const std::string& args) {
     // This is another solution which is not right but it is working
     // std::string runningCommand = command + " " + args;
     // return std::system(runningCommand.c_str());
 
 #ifdef _WIN32
-    STARTUPINFOW si = {0};
-    si.cb = sizeof(STARTUPINFOW);
+    STARTUPINFOW si;
+    ZeroMemory(&si, sizeof(si));
+    si.cb = sizeof(si);
     PROCESS_INFORMATION pi;
 
     // Convert command and args to a single wstring
