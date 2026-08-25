@@ -1,4 +1,3 @@
-
 cmake_minimum_required(VERSION 3.13)
 
 add_library(variables
@@ -10,7 +9,12 @@ add_library(variables
 target_include_directories(variables
     PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ${SRC_DIR}
+    ${CMAKE_SOURCE_DIR}/src
+)
+
+target_link_libraries(variables
+    PUBLIC
+    utils
 )
 
 target_compile_features(variables

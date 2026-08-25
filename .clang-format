@@ -10,7 +10,7 @@ BraceWrapping:
 IndentWidth: 4
 AccessModifierOffset: -4
 IndentCaseLabels: false
-NamespaceIndentation: Inner
+NamespaceIndentation: None
 ColumnLimit: 0
 AlignConsecutiveMacros: Consecutive
 DerivePointerAlignment: false

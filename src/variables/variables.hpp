@@ -7,15 +7,17 @@
 
 namespace variables {
 
-// Global variables
 extern std::vector<std::string> PATHs;
 extern std::unordered_map<std::string, std::string> ENVs;
+extern int lastExitStatus;
 
-// Constants
 constexpr char HOME_DIR[] = "~";
 constexpr char CURRENT_DIR[] = ".";
 constexpr char PARENT_DIR[] = "..";
-constexpr char COMMAND_DELIMITER[] = " ";
+constexpr char COMMAND_DELIMITER = ' ';
+
+// Populates PATHs and ENVs from the current process environment.
+void loadFromEnvironment();
 
 } // namespace variables
 
