@@ -2,30 +2,20 @@
 #define EXECUTABLES_HPP
 
 #include <filesystem>
-#include <iostream>
 #include <optional>
 #include <string>
-
-#ifdef _WIN32
-#include <windows.h>
-#else
-#include <sys/wait.h>
-#include <unistd.h>
-#endif
-
-#include "utils/utils.hpp"
-#include "variables/variables.hpp"
+#include <vector>
 
 namespace executables {
 
-// Search for an executable
+bool isExecutable(const std::filesystem::path& path);
 bool commandExists(const std::string& command);
-bool isExecutable(const std::string& path);
-
 std::optional<std::string> getExecutablePath(const std::string& command);
 
-// Run a command
-int run(const std::string& command, const std::string& args);
+// Runs `command` with `args` (already tokenized). Returns the child's exit
+// status, or -1 if the process could not be started.
+int run(const std::string& command, const std::vector<std::string>& args);
+
 } // namespace executables
 
 #endif

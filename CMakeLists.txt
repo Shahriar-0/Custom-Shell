@@ -1,34 +1,29 @@
-cmake_minimum_required(VERSION 3.21)
+cmake_minimum_required(VERSION 3.13)
 
-project(shell-starter-cpp CXX)
+project(shell-starter-cpp)
 
-# Enforce C++23 standards
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
 
-# -------------------------------------------------------------------
-# STATIC LINKING CONFIGURATION (a standalone .exe)
-# -------------------------------------------------------------------
-if(MSVC)
-    # Statically link MSVC C/C++ Runtime (/MT instead of /MD)
-    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
-elseif(MINGW)
-    # Statically link MinGW GCC runtimes & pthreads directly into the binary
-    add_link_options(-static -static-libgcc -static-libstdc++)
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Debug)
 endif()
-# -------------------------------------------------------------------
+
+set(CMAKE_CXX_FLAGS_DEBUG "-g -fsanitize=address,undefined")
+set(CMAKE_EXE_LINKER_FLAGS_DEBUG "-fsanitize=address,undefined")
 
 set(SRC_DIR "${CMAKE_SOURCE_DIR}/src")
 
-add_subdirectory(${SRC_DIR}/executables)
 add_subdirectory(${SRC_DIR}/utils)
 add_subdirectory(${SRC_DIR}/variables)
+add_subdirectory(${SRC_DIR}/executables)
 add_subdirectory(${SRC_DIR}/builtin_commands)
 
 add_executable(shell ${SRC_DIR}/main.cpp)
 
-target_link_libraries(shell PRIVATE executables utils variables builtin_commands)
+# builtin_commands PUBLIC-links executables/utils/variables transitively,
+# so linking it alone is sufficient.
+target_link_libraries(shell PRIVATE builtin_commands)
 
 if(WIN32)
     target_link_libraries(shell PRIVATE ws2_32)

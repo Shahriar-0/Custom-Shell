@@ -1,4 +1,3 @@
-
 cmake_minimum_required(VERSION 3.13)
 
 add_library(executables
@@ -10,7 +9,7 @@ add_library(executables
 target_include_directories(executables
     PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ${SRC_DIR}
+    ${CMAKE_SOURCE_DIR}/src
 )
 
 target_link_libraries(executables

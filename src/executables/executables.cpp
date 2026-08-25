@@ -1,19 +1,41 @@
 #include "executables.hpp"
 
+#include <cerrno>
+#include <cstring>
+#include <format>
+#include <iostream>
+
+#include "utils/utils.hpp"
+#include "variables/variables.hpp"
+
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
+
 namespace executables {
 
-bool isExecutable(const std::string& path) {
-    if (!utils::fileExists(path)) return false;
+bool isExecutable(const std::filesystem::path& path) {
+    if (!utils::fileExists(path)) {
+        return false;
+    }
     auto status = std::filesystem::status(path);
     return std::filesystem::is_regular_file(status) &&
            (status.permissions() & std::filesystem::perms::owner_exec) != std::filesystem::perms::none;
 }
 
 std::optional<std::string> getExecutablePath(const std::string& command) {
+    if (utils::isAbsolutePath(command) || utils::isRelativePath(command)) {
+        if (command.find('/') != std::string::npos && isExecutable(command)) {
+            return command;
+        }
+    }
     for (const auto& path : variables::PATHs) {
-        std::string command_path = path + "/" + command;
-        if (isExecutable(command_path)) {
-            return command_path;
+        std::filesystem::path candidate = std::filesystem::path(path) / command;
+        if (isExecutable(candidate)) {
+            return candidate.string();
         }
     }
     return std::nullopt;
@@ -23,77 +45,63 @@ bool commandExists(const std::string& command) {
     return getExecutablePath(command).has_value();
 }
 
-int run(const std::string& command, const std::string& args) {
-    // This is another solution which is not right but it is working
-    // std::string runningCommand = command + " " + args;
-    // return std::system(runningCommand.c_str());
-
 #ifdef _WIN32
-    STARTUPINFOW si;
-    ZeroMemory(&si, sizeof(si));
-    si.cb = sizeof(si);
-    PROCESS_INFORMATION pi;
 
-    // Convert command and args to a single wstring
-    std::string cmdLineStr = command + " " + args;
+int run(const std::string& command, const std::vector<std::string>& args) {
+    STARTUPINFOW si{};
+    si.cb = sizeof(STARTUPINFOW);
+    PROCESS_INFORMATION pi{};
+
+    std::string cmdLineStr = command;
+    for (const auto& arg : args) {
+        cmdLineStr += " \"" + arg + "\"";
+    }
+
     int wlen = MultiByteToWideChar(CP_UTF8, 0, cmdLineStr.c_str(), -1, nullptr, 0);
     std::wstring wcmdLine(wlen, L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, cmdLineStr.c_str(), -1, &wcmdLine[0], wlen);
+    MultiByteToWideChar(CP_UTF8, 0, cmdLineStr.c_str(), -1, wcmdLine.data(), wlen);
 
-    if (!CreateProcessW(nullptr,      // Application name
-                        &wcmdLine[0], // Command line
-                        nullptr,      // Process attributes
-                        nullptr,      // Thread attributes
-                        FALSE,        // Inherit handles
-                        0,            // Creation flags
-                        nullptr,      // Environment
-                        nullptr,      // Current directory
-                        &si,          // Startup info
-                        &pi)) {       // Process info
-        std::cerr << "CreateProcess failed (" << GetLastError() << ").\n";
+    if (!CreateProcessW(nullptr, wcmdLine.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
+        std::cerr << std::format("CreateProcess failed ({}).\n", GetLastError());
         return -1;
     }
 
-    // Wait for the child process to complete
     WaitForSingleObject(pi.hProcess, INFINITE);
 
-    // Close process and thread handles
+    DWORD exitCode = 0;
+    GetExitCodeProcess(pi.hProcess, &exitCode);
+
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
 
-    return 0;
+    return static_cast<int>(exitCode);
+}
 
 #else
-    std::vector<std::string> arguments = utils::split(args, variables::COMMAND_DELIMITER);
 
+int run(const std::string& command, const std::vector<std::string>& args) {
     std::vector<char*> cArgs;
     cArgs.push_back(const_cast<char*>(command.c_str()));
-    for (const std::string& arg : arguments) {
+    for (const auto& arg : args) {
         cArgs.push_back(const_cast<char*>(arg.c_str()));
     }
     cArgs.push_back(nullptr);
 
     pid_t pid = fork();
     if (pid == 0) {
-        // Child process
         execvp(command.c_str(), cArgs.data());
-        perror("execvp failed");
-        exit(EXIT_FAILURE);
+        std::cerr << std::format("{}: {}\n", command, strerror(errno));
+        std::exit(EXIT_FAILURE);
     }
-    else if (pid > 0) {
-        // Parent process
-        int status;
+    if (pid > 0) {
+        int status = 0;
         waitpid(pid, &status, 0);
-        return WEXITSTATUS(status);
+        return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
     }
-    else {
-        // Fork failed
-        perror("fork failed");
-        return -1;
-    }
-
-    return 0;
-#endif
+    std::cerr << std::format("fork failed: {}\n", strerror(errno));
+    return -1;
 }
+
+#endif
 
 } // namespace executables
