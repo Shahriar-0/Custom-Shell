@@ -54,3 +54,4 @@ vcpkg_installed
 *.xml
 NOTES.md
 graphify-out/
+.hermes/

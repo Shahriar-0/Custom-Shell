@@ -9,8 +9,14 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Debug)
 endif()
 
-set(CMAKE_CXX_FLAGS_DEBUG "-g -fsanitize=address,undefined")
-set(CMAKE_EXE_LINKER_FLAGS_DEBUG "-fsanitize=address,undefined")
+if(WIN32)
+    # MSYS2 MinGW GCC ships no libasan/libubsan runtime; even UBSan trap
+    # mode (__ubsan_handle_*_abort) needs libubsan. No sanitizers on Windows.
+    set(CMAKE_CXX_FLAGS_DEBUG "-g")
+else()
+    set(CMAKE_CXX_FLAGS_DEBUG "-g -fsanitize=address,undefined")
+    set(CMAKE_EXE_LINKER_FLAGS_DEBUG "-fsanitize=address,undefined")
+endif()
 
 set(SRC_DIR "${CMAKE_SOURCE_DIR}/src")
 
