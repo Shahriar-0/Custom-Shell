@@ -19,7 +19,7 @@ std::string removeQuotes(std::string_view str);
 // Quote/escape-aware tokenizer for shell input. Not a general-purpose
 // string splitter: encodes shell-specific grammar (matching quotes,
 // backslash escapes, word boundaries) that no library gets right for us.
-std::vector<std::string> tokenize(std::string_view str);
+std::vector<std::string> tokenize(std::string_view str, char delimiter = ' ');
 
 // Filesystem glob, for now it's hand-rolled, but could be replaced with
 // a more robust implementation later.
@@ -29,6 +29,10 @@ bool fileExists(const std::filesystem::path& path);
 bool isRelativePath(std::string_view path);
 bool isAbsolutePath(std::string_view path);
 bool isHomePath(std::string_view path);
+
+// Expands a leading '~' to the user's home directory (USERPROFILE on
+// Windows, HOME elsewhere). Non-home paths pass through unchanged.
+std::string expandHome(std::string_view pattern);
 
 } // namespace utils
 

@@ -1,19 +1,15 @@
 cmake_minimum_required(VERSION 3.13)
 
-set(BUILTIN_COMMANDS_SRC
-    builtin_commands.cpp
-    builtin_commands.hpp
-)
-
 add_library(builtin_commands
     STATIC
-    ${BUILTIN_COMMANDS_SRC}
+    builtin_commands.cpp
+    builtin_commands.hpp
 )
 
 target_include_directories(builtin_commands
     PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ${SRC_DIR}
+    ${CMAKE_SOURCE_DIR}/src
 )
 
 target_link_libraries(builtin_commands
@@ -33,4 +29,3 @@ target_compile_options(builtin_commands
     $<$<CXX_COMPILER_ID:GNU>:-Wall -Wextra>
     $<$<CXX_COMPILER_ID:MSVC>:/W4>
 )
-

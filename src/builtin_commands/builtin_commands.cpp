@@ -1,117 +1,104 @@
 #include "builtin_commands.hpp"
 
+#include <cstdlib>
 #include <filesystem>
+#include <format>
 #include <iostream>
+
+#include "executables/executables.hpp"
+#include "utils/utils.hpp"
+#include "variables/variables.hpp"
 
 namespace shell_builtin_commands {
 
-// command map
-std::unordered_map<std::string, CommandFunction> shell_builtin_cmds = {
-    {EXIT, &shellExit}, {ECHO, &echo}, {HELP, &help}, {CLEAR, &clear}, {TYPE, &type}, {PWD, &pwd}, {CD, &cd}};
-
+const std::unordered_map<std::string, CommandFunction> shell_builtin_cmds = {
+    {std::string(EXIT), &shellExit},
+    {std::string(ECHO), &echo},
+    {std::string(HELP), &help},
+    {std::string(CLEAR), &clear},
+    {std::string(TYPE), &type},
+    {std::string(PWD), &pwd},
+    {std::string(CD), &cd},
+};
 
 bool shellBuiltinCommandExists(const std::string& command) {
-    return shell_builtin_cmds.find(command) != shell_builtin_cmds.end();
+    return shell_builtin_cmds.contains(command);
 }
 
-// Function implementations
-int echo(const std::string& args) {
-    std::vector<std::string> argsVec = utils::split(args, variables::COMMAND_DELIMITER);
-    for (size_t i = 0; i < argsVec.size(); ++i) {
-        std::cout << argsVec[i];
-        if (i + 1 < argsVec.size()) {
-            std::cout << " ";
-        }
-    }
-    std::cout << std::endl;
+int echo(const std::vector<std::string>& args) {
+    std::cout << utils::join(args, " ") << "\n";
     return 0;
 }
 
-int shellExit(const std::string& args) {
+int shellExit(const std::vector<std::string>& args) {
     int status = 0;
-    std::string trimmed = utils::trim(args);
-    if (!trimmed.empty()) {
+    if (!args.empty()) {
         try {
-            status = std::stoi(trimmed);
+            status = std::stoi(args[0]);
         }
         catch (const std::exception&) {
-            std::cerr << "exit: numeric argument required" << std::endl;
-            status = 2; // bash convention for this error
+            std::cerr << std::format("exit: {}: numeric argument required\n", args[0]);
+            std::exit(2);
         }
     }
     std::exit(status);
 }
 
-int help(const std::string& args) {
-    (void)args;
-    std::cout << "Available commands:" << std::endl;
-    for (const auto& command : shell_builtin_cmds) {
-        std::cout << command.first << std::endl;
+int help(const std::vector<std::string>&) {
+    std::cout << "Available commands:\n";
+    for (const auto& [name, fn] : shell_builtin_cmds) {
+        std::cout << "  " << name << "\n";
     }
     return 0;
 }
 
-int clear(const std::string& args) {
-    (void)args;
-    std::system("clear");
+int clear(const std::vector<std::string>&) {
+    // ANSI clear-screen + move cursor home.
+    std::cout << "\033[2J\033[H";
     return 0;
 }
 
-int type(const std::string& args) {
+int type(const std::vector<std::string>& args) {
     if (args.empty()) {
-        std::cout << "Usage: type [command]" << std::endl;
+        std::cout << "Usage: type [command]\n";
         return 1;
     }
 
-    if (shellBuiltinCommandExists(args)) {
-        std::cout << args << " is a shell builtin" << std::endl;
+    const std::string& command = args[0];
+    if (shellBuiltinCommandExists(command)) {
+        std::cout << std::format("{} is a shell builtin\n", command);
+        return 0;
     }
-    else if (auto path = executables::getExecutablePath(args); path.has_value()) {
-        std::cout << args << " is " << utils::remove(path.value(), "\"") << std::endl;
+    if (auto path = executables::getExecutablePath(command); path.has_value()) {
+        std::cout << std::format("{} is {}\n", command, *path);
+        return 0;
     }
-    else {
-        std::cerr << args << ": not found" << std::endl;
-    }
+    std::cerr << std::format("{}: not found\n", command);
+    return 1;
+}
+
+int pwd(const std::vector<std::string>&) {
+    std::cout << std::filesystem::current_path().string() << "\n";
     return 0;
 }
 
-int pwd(const std::string& args) {
-    (void)args;
-    std::cout << utils::remove(std::filesystem::current_path().string(), "\"") << std::endl;
-    return 0;
-}
+int cd(const std::vector<std::string>& args) {
+    std::string target = args.empty() ? "~" : args[0];
 
-int cd(const std::string& args) {
-    if (args.empty() || utils::isHomePath(args)) {
-        const char* home = std::getenv("HOME");
-        if (home) {
-            std::filesystem::current_path(home);
-        }
-        else {
-            std::cerr << "HOME environment variable not set" << std::endl;
-        }
+    target = utils::expandHome(target);
+    if (utils::isHomePath(target)) {
+        std::cerr << "cd: HOME not set\n";
+        return 1;
     }
-    else if (utils::isAbsolutePath(args)) {
-        try {
-            std::filesystem::current_path(args);
-        }
-        catch (const std::exception& e) {
-            // std::cerr << e.what() << std::endl;
-            std::cerr << "cd: " << args << ": No such file or directory" << std::endl;
-        }
-    }
-    else if (utils::isRelativePath(args)) {
-        try {
-            std::filesystem::current_path(std::filesystem::current_path() / args);
-        }
-        catch (const std::exception& e) {
-            // std::cerr << e.what() << std::endl;
-            std::cerr << "cd: " << args << ": No such file or directory" << std::endl;
-        }
-    }
-    else {
-        // How the hell did you get here
-        std::cerr << "Invalid path" << std::endl;
+
+    std::error_code ec;
+    std::filesystem::path newPath = utils::isAbsolutePath(target)
+                                        ? std::filesystem::path(target)
+                                        : std::filesystem::current_path() / target;
+    std::filesystem::current_path(newPath, ec);
+    if (ec) {
+        std::cerr << std::format("cd: {}: No such file or directory\n", target);
+        return 1;
     }
     return 0;
 }

@@ -74,7 +74,7 @@ std::string removeQuotes(std::string_view str) {
     return std::string(str);
 }
 
-std::vector<std::string> tokenize(std::string_view str, char delimiter = ' ') {
+std::vector<std::string> tokenize(std::string_view str, char delimiter) {
     std::vector<std::string> result;
     std::string token;
 
@@ -172,7 +172,10 @@ bool matchesWildcard(std::string_view name, std::string_view pattern) {
     return p == pattern.size();
 }
 
-// Expands a leading '~' to the user's home directory, portably.
+} // namespace
+
+// Expands a leading '~' to the user's home directory (USERPROFILE on
+// Windows, HOME elsewhere). Non-home paths pass through unchanged.
 std::string expandHome(std::string_view pattern) {
     if (!isHomePath(pattern)) {
         return std::string(pattern);
@@ -187,8 +190,6 @@ std::string expandHome(std::string_view pattern) {
     }
     return std::string(home) + std::string(pattern.substr(1));
 }
-
-} // namespace
 
 std::vector<std::string> glob(const std::string& pattern) {
     std::vector<std::string> result;
