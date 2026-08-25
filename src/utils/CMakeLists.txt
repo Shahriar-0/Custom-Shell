@@ -1,4 +1,3 @@
-
 cmake_minimum_required(VERSION 3.13)
 
 add_library(utils
@@ -10,7 +9,7 @@ add_library(utils
 target_include_directories(utils
     PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ${SRC_DIR}
+    ${CMAKE_SOURCE_DIR}/src
 )
 
 target_compile_features(utils
