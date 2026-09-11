@@ -5,7 +5,8 @@
 # Usage:  tests/run_tests.sh            (uses build/shell.exe)
 #         SHELL_BIN=build/shell_static.exe tests/run_tests.sh
 #
-# Requires the ucrt64 runtime DLLs on PATH (any MSYS shell has them).
+# Requires the ucrt64 runtime DLLs on PATH (any MSYS shell has them) when
+# testing a Windows build; on Linux/macOS the block below is a no-op.
 
 set -u
 
@@ -33,15 +34,17 @@ run() {
     printf '%b' "$1" | "$BIN" >"$tmp.out" 2>"$tmp.err"
     RC=$?
     # strip prompts so assertions only see command output
-    OUT=$(sed 's/\$ //' "$tmp.out")
+    OUT=$(sed 's/\$ //g' "$tmp.out")
     ERR=$(cat "$tmp.err")
     PROMPTS=$(grep -o '\$ ' "$tmp.out" | wc -l || true)
     rm -f "$tmp" "$tmp.out" "$tmp.err"
 }
 
 # check <name> <expected> <actual-value> <where>
-#   where: out (default) | err  -> $3 ignored, substring match against captured output
+#   where: out (default) | err  -> $3 ignored, matched against captured output
 #          rc                   -> $3 is the real exit status, exact match vs $2
+# An empty <expected> means "nothing at all" and is matched exactly, not as
+# a (trivially-true-for-any-string) empty substring.
 check() {
     local name="$1" want="$2" actual="$3" where="${4:-out}" ok=0
     case "$where" in
@@ -51,6 +54,8 @@ check() {
     esac
     if [[ "$where" == "rc" ]]; then
         [[ "$actual" -eq "$want" ]] && ok=1 || ok=0
+    elif [[ -z "$want" ]]; then
+        [[ -z "$actual" ]] && ok=1 || ok=0
     else
         [[ "$actual" == *"$want"* ]] && ok=1 || ok=0
     fi
@@ -63,13 +68,53 @@ check() {
     fi
 }
 
+# checknot <name> <forbidden-substring> [where]
+# Asserts <forbidden-substring> is absent from the given stream (default
+# out). Use this — not check with an empty "want" — whenever the point is
+# "this specific thing must not have run/appeared" alongside other output.
+checknot() {
+    local name="$1" forbidden="$2" where="${3:-out}" actual=""
+    case "$where" in
+        out) actual="$OUT" ;;
+        err) actual="$ERR" ;;
+    esac
+    if [[ "$actual" != *"$forbidden"* ]]; then
+        pass=$((pass+1))
+        printf 'ok   %s\n' "$name"
+    else
+        fail=$((fail+1))
+        printf 'FAIL %s\n     did not want [%s] in %s: %s\n' "$name" "$forbidden" "$where" "$actual"
+    fi
+}
+
+# norm_path <path> -> path with backslashes turned into forward slashes and
+# lowercased. Needed only for the pwd comparison below: on Windows, MSYS2
+# bash's own `pwd` is POSIX-style (/d/foo/bar) while shell.exe is a native
+# binary using std::filesystem, which prints Windows-style paths
+# (D:\foo\bar) — same directory, different spelling. `pwd -W` (an MSYS2/Git
+# Bash extension) gives bash's own Windows-style form so the two are at
+# least comparable, and normalizing away slash direction and drive-letter
+# case handles the rest. On real POSIX systems `pwd -W` doesn't exist, the
+# `|| pwd` fallback kicks in, and both sides are already identical POSIX
+# paths — normalization is then a harmless no-op.
+norm_path() {
+    printf '%s' "$1" | tr '\\' '/' | tr '[:upper:]' '[:lower:]'
+}
+
 # ---------- basic execution ----------
 
 run 'echo hello world\n'
 check "echo args"            "hello world" "$OUT"
 
+# Compare against the test runner's own cwd rather than a hardcoded folder
+# name — the shell inherits this process's cwd, but the repo can be checked
+# out anywhere, on any OS. `pwd -W` gives bash's Windows-style form when
+# running under MSYS2/Git Bash (falls back to plain `pwd` elsewhere); both
+# sides are normalized so backslash-vs-forward-slash and drive-letter case
+# don't cause a false failure.
+expected_cwd="$(norm_path "$(pwd -W 2>/dev/null || pwd)")"
 run 'pwd\n'
-check "pwd prints a path"    "Custom-Shell" "$OUT"
+check "pwd prints a path"    "$expected_cwd" "$(norm_path "$OUT")"
 
 run 'type echo\n'
 check "type finds builtin"   "shell builtin" "$OUT"
@@ -101,17 +146,48 @@ run 'echo one ; echo two\n'
 check "semicolon runs both"    "one" "$OUT"
 check "semicolon runs both (2)" "two" "$OUT"
 
-run 'false || echo fallback\necho after\n'   # false isn't builtin -> 127, still nonzero
+# nosuchcmd_xyz is guaranteed missing (127, a real failure); pwd is a
+# builtin, guaranteed present on every platform and always succeeding (0).
+# Deliberately not using `true`/`false`: those are external binaries that
+# some platforms don't ship on PATH at all and others (e.g. Linux
+# coreutils) do — relying on that made these tests' outcome depend on the
+# OS running them rather than on the shell's own logic.
+run 'nosuchcmd_xyz || echo fallback\n'
 check "|| runs after failure"   "fallback" "$OUT"
 
-run 'true && echo yes\n'                      # true isn't builtin -> 127, && skips echo
-check "&& skips after failure"  "" "$OUT"
-check "&& skip leaves silence"  "yes" "$(grep -v yes <<<"$OUT")"
+run 'pwd || echo fallback\n'
+checknot "|| skips after success"  "fallback"
 
-# exit status plumbing through the connector logic:
-# cd fails (rc 1) -> && branch skipped; then ; runs regardless
+run 'nosuchcmd_xyz && echo skipped\n'
+check "&& skips after failure"  "" "$OUT"
+
+run 'pwd && echo yes\n'
+check "&& runs after success"   "yes" "$OUT"
+
+# Regression: the connector that decides whether a pipeline runs is the
+# connector coming INTO it (the previous pipeline's), never its own
+# outgoing connector. Getting this backwards makes a shell skip the very
+# first command whenever it's followed by '||' (it checks "succeeded so
+# far" before anything has run), and lets '&&'-guarded commands run when
+# they should have been skipped.
+run 'pwd || echo should-not-run\n'
+checknot "first command isn't skipped by its own trailing '||'" "should-not-run"
+
+# cd fails (rc 1) -> the && branch must be skipped; the ; branch always
+# runs regardless. The checknot below is what actually catches a shell
+# that runs both branches unconditionally — the original version of this
+# test only checked that "ran" appeared and never checked that "skipped"
+# didn't, so it passed even when the && branch incorrectly ran too.
 run 'cd /definitely/not/a/real/dir && echo skipped ; echo ran\n'
-check "connector uses real status"  "ran" "$OUT"
+check    "connector uses real status: ; always runs"    "ran" "$OUT"
+checknot "connector uses real status: && branch skipped" "skipped"
+
+# Three-link chain false && X || Y: X must be skipped (previous failed);
+# Y must run, because the last *actually executed* command's status (the
+# failure) is what || sees — a skipped command never updates the status.
+run 'nosuchcmd_xyz && echo skipped2 || echo shown\n'
+check    "&&-then-|| chain: || branch runs"    "shown" "$OUT"
+checknot "&&-then-|| chain: && branch skipped" "skipped2"
 
 # ---------- comments & blank input ----------
 
@@ -119,7 +195,8 @@ run '# a comment line\necho visible\n'
 check "comment ignored"       "visible" "$OUT"
 
 run '\n   \n\t\n'
-check "blank lines are no-ops"  "" "$ERR"
+check "blank lines produce no output"  "" "$OUT"
+check "blank lines produce no errors"  "" "$ERR" err
 
 # ---------- syntax errors: report, set rc=2, keep REPL alive ----------
 

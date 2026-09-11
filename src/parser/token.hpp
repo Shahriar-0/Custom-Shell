@@ -23,7 +23,7 @@ enum class TokenType {
 // Phase 4 (variable expansion) needs this to decide whether $VAR inside
 // a word should expand — POSIX expands in double quotes but not single.
 enum class QuoteKind : char {
-    None   = 'u',
+    None = 'u',
     Single = 's',
     Double = 'd',
     Escape = 'e', // character was produced by a backslash escape
@@ -31,9 +31,9 @@ enum class QuoteKind : char {
 
 struct Token {
     TokenType type = TokenType::EndOfInput;
-    std::string text;                     // raw lexeme (quotes stripped for Word)
-    size_t column = 0;                    // 1-based column of first char in source
-    std::string quoteKinds;               // per-char QuoteKind, only meaningful for Word
+    std::string text;       // raw lexeme (quotes stripped for Word)
+    size_t column = 0;      // 1-based column of first char in source
+    std::string quoteKinds; // per-char QuoteKind, only meaningful for Word
 
     bool isWord() const { return type == TokenType::Word; }
 };

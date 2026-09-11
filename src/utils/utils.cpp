@@ -106,10 +106,12 @@ std::vector<std::string> tokenize(std::string_view str, char delimiter) {
                 // Closing quote.
                 if (c == quoteChar) {
                     insideQuotes = false;
-                } else {
+                }
+                else {
                     token += c;
                 }
-            } else {
+            }
+            else {
                 insideQuotes = true;
                 quoteChar = c;
             }

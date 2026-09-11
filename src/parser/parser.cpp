@@ -31,38 +31,37 @@ void Parser::expectWordHere(const std::string& context) {
     }
 }
 
-Pipeline Parser::parse() {
-    Pipeline result;
+CommandLine Parser::parse() {
+    CommandLine result;
 
-    // Empty / whitespace-only line.
+    // Empty / whitespace-only / all-comment line.
     if (atEnd()) {
         return result;
     }
 
     // Reject leading operators: "| cmd", "&& cmd", "> file", "; cmd"...
     switch (peek().type) {
-        case TokenType::Pipe:
-        case TokenType::And:
-        case TokenType::Or:
-        case TokenType::Semicolon:
-            fail("unexpected '" + peek().text + "' at start of command",
-                 peek().column);
-        case TokenType::RedirectIn:
-        case TokenType::RedirectOut:
-        case TokenType::RedirectAppend:
-        case TokenType::Ampersand:
-            fail("unexpected '" + peek().text + "' at start of command",
-                 peek().column);
-        default:
-            break;
+    case TokenType::Pipe:
+    case TokenType::And:
+    case TokenType::Or:
+    case TokenType::Semicolon:
+    case TokenType::RedirectIn:
+    case TokenType::RedirectOut:
+    case TokenType::RedirectAppend:
+    case TokenType::Ampersand:
+        fail("unexpected '" + peek().text + "' at start of command",
+             peek().column);
+    default:
+        break;
     }
 
     while (true) {
-        PipelineNode node = parsePipeline();
-        result.nodes.push_back(std::move(node));
+        PipelineLink link;
+        link.pipeline = parsePipeline();
 
         Connector connector = parseConnector();
-        result.nodes.back().connectorToNext = connector;
+        link.connectorToNext = connector;
+        result.pipelines.push_back(std::move(link));
 
         if (connector == Connector::None) {
             break;
@@ -94,21 +93,23 @@ Connector Parser::parseConnector() {
     return Connector::None;
 }
 
-PipelineNode Parser::parsePipeline() {
-    PipelineNode node;
+Pipeline Parser::parsePipeline() {
+    Pipeline pipeline;
 
-    node.commands.push_back(parseCommand());
+    pipeline.commands.push_back(parseCommand());
     while (match(TokenType::Pipe)) {
-        // Reject "cmd | | cmd2" and trailing "cmd1 |".
+        // Reject "cmd | | cmd2" and trailing "cmd1 |" with a clear message;
+        // a bare "cmd1 |" at end of input also falls through to
+        // parseCommand()'s own "expected a command" error either way.
         if (!atEnd() && !check(TokenType::Word) && !check(TokenType::RedirectIn) &&
             !check(TokenType::RedirectOut) && !check(TokenType::RedirectAppend)) {
             fail("expected a command after '|', found '" + peek().text + "'",
                  peek().column);
         }
-        node.commands.push_back(parseCommand());
+        pipeline.commands.push_back(parseCommand());
     }
 
-    return node;
+    return pipeline;
 }
 
 Command Parser::parseCommand() {
@@ -120,16 +121,17 @@ Command Parser::parseCommand() {
     while (true) {
         if (check(TokenType::Word)) {
             cmd.args.push_back(advance().text);
-        } else if (check(TokenType::RedirectOut)) {
-            cmd.redirections.push_back(
-                parseRedirection(RedirType::Out));
-        } else if (check(TokenType::RedirectAppend)) {
-            cmd.redirections.push_back(
-                parseRedirection(RedirType::Append));
-        } else if (check(TokenType::RedirectIn)) {
-            cmd.redirections.push_back(
-                parseRedirection(RedirType::In));
-        } else {
+        }
+        else if (check(TokenType::RedirectOut)) {
+            cmd.redirections.push_back(parseRedirection(RedirType::Out));
+        }
+        else if (check(TokenType::RedirectAppend)) {
+            cmd.redirections.push_back(parseRedirection(RedirType::Append));
+        }
+        else if (check(TokenType::RedirectIn)) {
+            cmd.redirections.push_back(parseRedirection(RedirType::In));
+        }
+        else {
             break;
         }
     }
@@ -140,13 +142,13 @@ Command Parser::parseCommand() {
 Redirection Parser::parseRedirection(RedirType type) {
     advance(); // consume operator
     expectWordHere(type == RedirType::Append ? "'>>'"
-                  : type == RedirType::Out   ? "'>'"
+                   : type == RedirType::Out  ? "'>'"
                                              : "'<'");
     Token target = advance();
     return Redirection{type, target.text};
 }
 
-Pipeline parseLine(std::string_view input) {
+CommandLine parseLine(std::string_view input) {
     return Parser(lex(input)).parse();
 }
 

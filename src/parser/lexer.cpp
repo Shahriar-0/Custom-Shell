@@ -58,21 +58,21 @@ private:
         }
 
         switch (char c = peek()) {
-            case '|': return lexPipe();
-            case '&': return lexAmpersand();
-            case ';':
-                advance();
-                return makeToken(TokenType::Semicolon, ";");
-            case '<':
-                advance();
-                return makeToken(TokenType::RedirectIn, "<");
-            case '>': return lexRedirectOut();
-            case '(':
-            case ')':
-                fail(std::string("unexpected '") + c +
+        case '|': return lexPipe();
+        case '&': return lexAmpersand();
+        case ';':
+            advance();
+            return makeToken(TokenType::Semicolon, ";");
+        case '<':
+            advance();
+            return makeToken(TokenType::RedirectIn, "<");
+        case '>': return lexRedirectOut();
+        case '(':
+        case ')':
+            fail(std::string("unexpected '") + c +
                      "' (subshells/grouping are not supported yet)",
-                     startColumn_);
-            default: return lexWord();
+                 startColumn_);
+        default: return lexWord();
         }
     }
 
@@ -128,11 +128,14 @@ private:
 
             if (c == '\'') {
                 lexSingleQuote(tok);
-            } else if (c == '"') {
+            }
+            else if (c == '"') {
                 lexDoubleQuote(tok);
-            } else if (c == '\\') {
+            }
+            else if (c == '\\') {
                 lexEscape(tok, /*inDoubleQuotes=*/false);
-            } else {
+            }
+            else {
                 appendChar(tok, c, QuoteKind::None);
                 advance();
             }
@@ -147,16 +150,16 @@ private:
     // True if this character always starts an operator token outside quotes.
     static bool isOperatorStart(char c) {
         switch (c) {
-            case '|':
-            case '&':
-            case ';':
-            case '<':
-            case '>':
-            case '(':
-            case ')':
-                return true;
-            default:
-                return false;
+        case '|':
+        case '&':
+        case ';':
+        case '<':
+        case '>':
+        case '(':
+        case ')':
+            return true;
+        default:
+            return false;
         }
     }
 

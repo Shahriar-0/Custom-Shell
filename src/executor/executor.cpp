@@ -22,7 +22,7 @@ void reportNotImplemented(const std::string& feature, const std::string& detail)
 int runCommand(const parser::Command& cmd, bool background) {
     if (!cmd.redirections.empty()) {
         reportNotImplemented("redirection", "'" + cmd.redirections.front().filename +
-                                                 "' was parsed but not applied");
+                                                "' was parsed but not applied");
         return kNotImplemented;
     }
     if (background) {
@@ -44,40 +44,51 @@ int runCommand(const parser::Command& cmd, bool background) {
     return 127;
 }
 
-// Runs one pipeline segment. Multi-command pipelines are Phase 3; a single
-// command is the common case today.
-int runPipelineNode(const parser::PipelineNode& node, bool background) {
-    if (node.isPipeline()) {
+// Runs one pipeline. Multi-stage pipelines (cmd1 | cmd2) are Phase 3; a
+// single command is the common case today.
+int runPipeline(const parser::Pipeline& pipeline, bool background) {
+    if (pipeline.isMultiStage()) {
         reportNotImplemented("pipes",
-                             std::to_string(node.commands.size()) +
+                             std::to_string(pipeline.commands.size()) +
                                  "-command pipeline");
         return kNotImplemented;
     }
-    return runCommand(node.commands.front(), background);
+    return runCommand(pipeline.commands.front(), background);
 }
 
 } // namespace
 
-int execute(const parser::Pipeline& pipeline) {
+int execute(const parser::CommandLine& line) {
     variables::lastExitStatus = 0;
 
-    for (const auto& node : pipeline.nodes) {
-        switch (node.connectorToNext) {
-            case parser::Connector::And:
-                if (variables::lastExitStatus != 0) {
-                    continue; // short-circuit: skip until next non-&& link
-                }
-                break;
-            case parser::Connector::Or:
-                if (variables::lastExitStatus == 0) {
-                    continue; // short-circuit: skip until next non-|| link
-                }
-                break;
-            case parser::Connector::Sequence:
-            case parser::Connector::None:
-                break;
+    // `incoming` is the connector that led INTO the current link — i.e.
+    // the previous link's connectorToNext — not the current link's own
+    // connectorToNext, which describes where it leads NEXT. Checking a
+    // link's own outgoing connector to decide whether to run it is the
+    // classic off-by-one here: it would ask "should the thing after this
+    // succeed" while it's actually deciding whether THIS thing runs.
+    parser::Connector incoming = parser::Connector::None;
+
+    for (const auto& link : line.pipelines) {
+        switch (incoming) {
+        case parser::Connector::And:
+            if (variables::lastExitStatus != 0) {
+                incoming = link.connectorToNext;
+                continue; // short-circuit: previous command failed
+            }
+            break;
+        case parser::Connector::Or:
+            if (variables::lastExitStatus == 0) {
+                incoming = link.connectorToNext;
+                continue; // short-circuit: previous command succeeded
+            }
+            break;
+        case parser::Connector::Sequence:
+        case parser::Connector::None:
+            break;
         }
-        variables::lastExitStatus = runPipelineNode(node, pipeline.background);
+        variables::lastExitStatus = runPipeline(link.pipeline, line.background);
+        incoming = link.connectorToNext;
     }
 
     return variables::lastExitStatus;

@@ -15,24 +15,26 @@ struct ParseError {
     size_t column = 0;
 };
 
-// Parses a token stream into a full-line Pipeline.
+// Parses a token stream into a CommandLine.
 //
-// Grammar (left-associative at every level):
-//   line      := and_or (('&' {EOF}) | (';' | '&&' | '||') and_or)*
-//   and_or    := pipeline ('|' pipeline)*        -- note: '|' binds tighter,
-//                                                   so this level is really
-//   pipeline  := command ('|' command)*           -- the pipeline level; see below
-//   command   := WORD | redirection ...
-//   redirection := ('>' | '>>' | '<') WORD
+// Grammar (left-associative at every level). This flattens ';', '&&' and
+// '||' into one list-with-connectors rather than a nested tree; that's
+// operationally equivalent to POSIX's nested and_or/list grammar for
+// left-to-right execution with short-circuiting, and much simpler to walk:
 //
-// Throws ParseError on malformed input. On success the returned Pipeline is
-// guaranteed well-formed: no empty commands, no dangling operators, every
-// redirection has exactly one filename word.
+//   command_line := pipeline ( (';' | '&&' | '||') pipeline )* ['&']
+//   pipeline     := command ('|' command)*
+//   command      := WORD+ redirection*
+//   redirection  := ('>' | '>>' | '<') WORD
+//
+// Throws ParseError on malformed input. On success, the returned
+// CommandLine is well-formed: no empty commands, no dangling operators,
+// and every redirection has exactly one filename word.
 class Parser {
 public:
     explicit Parser(std::vector<Token> tokens) : tokens_(std::move(tokens)) {}
 
-    Pipeline parse();
+    CommandLine parse();
 
 private:
     [[noreturn]] static void fail(const std::string& message, size_t column) {
@@ -40,9 +42,6 @@ private:
     }
 
     const Token& peek() const { return tokens_[pos_]; }
-
-    // Like peek(), but skips over nothing — used to check "what's after X".
-    const Token& peekNext() const { return tokens_[pos_ + 1]; }
 
     const Token& advance() { return tokens_[pos_++]; }
 
@@ -57,7 +56,7 @@ private:
 
     void expectWordHere(const std::string& context);
 
-    PipelineNode parsePipeline();
+    Pipeline parsePipeline();
     Command parseCommand();
     Redirection parseRedirection(RedirType type);
     Connector parseConnector();
@@ -67,7 +66,7 @@ private:
 };
 
 // Convenience wrapper: lex + parse in one call.
-Pipeline parseLine(std::string_view input);
+CommandLine parseLine(std::string_view input);
 
 } // namespace parser
 

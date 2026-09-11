@@ -13,6 +13,12 @@ int main() {
 
     variables::loadFromEnvironment();
 
+    auto reportSyntaxError = [](const std::string& message, size_t column) {
+        std::cerr << "myshell: syntax error: " << message
+                  << " (column " << column << ")\n";
+        variables::lastExitStatus = 2;
+    };
+
     while (true) {
         std::cout << "$ ";
 
@@ -23,27 +29,25 @@ int main() {
         }
 
         // Lex + parse the whole line before executing anything: a line with
-        // a syntax error never partially runs (Crafting Interpreters rule).
-        parser::Pipeline pipeline;
+        // a syntax error never partially runs.
+        parser::CommandLine line;
         try {
-            pipeline = parser::parseLine(input);
-        } catch (const parser::LexError& e) {
-            std::cerr << "myshell: syntax error: " << e.message
-                      << " (column " << e.column << ")\n";
-            variables::lastExitStatus = 2;
+            line = parser::parseLine(input);
+        }
+        catch (const parser::LexError& e) {
+            reportSyntaxError(e.message, e.column);
             continue;
-        } catch (const parser::ParseError& e) {
-            std::cerr << "myshell: syntax error: " << e.message
-                      << " (column " << e.column << ")\n";
-            variables::lastExitStatus = 2;
+        }
+        catch (const parser::ParseError& e) {
+            reportSyntaxError(e.message, e.column);
             continue;
         }
 
-        if (pipeline.nodes.empty()) {
+        if (line.pipelines.empty()) {
             continue;
         }
 
-        executor::execute(pipeline);
+        executor::execute(line);
     }
 
     return variables::lastExitStatus;

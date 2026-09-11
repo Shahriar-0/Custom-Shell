@@ -18,7 +18,7 @@ struct LexError {
 //
 // Grammar handled here (lexical level):
 //   - whitespace separates tokens
-//   - '...' is fully literal; "..." is literal except \" and \\
+//   - '...' is fully literal; "..." is literal except for \" and \ itself
 //   - backslash outside quotes escapes the next character
 //   - # starts a comment (rest of line ignored) when unquoted
 //   - operators: | || && & ; < > >>  (only recognized outside quotes)
