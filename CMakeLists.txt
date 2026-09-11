@@ -24,12 +24,12 @@ add_subdirectory(${SRC_DIR}/utils)
 add_subdirectory(${SRC_DIR}/variables)
 add_subdirectory(${SRC_DIR}/executables)
 add_subdirectory(${SRC_DIR}/builtin_commands)
+add_subdirectory(${SRC_DIR}/parser)
+add_subdirectory(${SRC_DIR}/executor)
 
 add_executable(shell ${SRC_DIR}/main.cpp)
 
-# builtin_commands PUBLIC-links executables/utils/variables transitively,
-# so linking it alone is sufficient.
-target_link_libraries(shell PRIVATE builtin_commands)
+target_link_libraries(shell PRIVATE executor builtin_commands)
 
 if(WIN32)
     target_link_libraries(shell PRIVATE ws2_32)

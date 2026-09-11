@@ -1,9 +1,10 @@
 #include <iostream>
 #include <string>
 
-#include "builtin_commands/builtin_commands.hpp"
-#include "executables/executables.hpp"
-#include "utils/utils.hpp"
+#include "executor/executor.hpp"
+#include "parser/ast.hpp"
+#include "parser/lexer.hpp"
+#include "parser/parser.hpp"
 #include "variables/variables.hpp"
 
 int main() {
@@ -21,25 +22,28 @@ int main() {
             break; // EOF (Ctrl+D)
         }
 
-        std::vector<std::string> tokens = utils::tokenize(input);
-        if (tokens.empty()) {
+        // Lex + parse the whole line before executing anything: a line with
+        // a syntax error never partially runs (Crafting Interpreters rule).
+        parser::Pipeline pipeline;
+        try {
+            pipeline = parser::parseLine(input);
+        } catch (const parser::LexError& e) {
+            std::cerr << "myshell: syntax error: " << e.message
+                      << " (column " << e.column << ")\n";
+            variables::lastExitStatus = 2;
+            continue;
+        } catch (const parser::ParseError& e) {
+            std::cerr << "myshell: syntax error: " << e.message
+                      << " (column " << e.column << ")\n";
+            variables::lastExitStatus = 2;
             continue;
         }
 
-        const std::string& command = tokens[0];
-        std::vector<std::string> args(tokens.begin() + 1, tokens.end());
+        if (pipeline.nodes.empty()) {
+            continue;
+        }
 
-        if (auto it = shell_builtin_commands::shell_builtin_cmds.find(command);
-            it != shell_builtin_commands::shell_builtin_cmds.end()) {
-            variables::lastExitStatus = it->second(args);
-        }
-        else if (executables::commandExists(command)) {
-            variables::lastExitStatus = executables::run(command, args);
-        }
-        else {
-            std::cerr << command << ": command not found\n";
-            variables::lastExitStatus = 127;
-        }
+        executor::execute(pipeline);
     }
 
     return variables::lastExitStatus;
