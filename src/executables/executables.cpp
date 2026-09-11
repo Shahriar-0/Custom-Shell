@@ -26,6 +26,9 @@ bool isExecutable(const std::filesystem::path& path) {
            (status.permissions() & std::filesystem::perms::owner_exec) != std::filesystem::perms::none;
 }
 
+// Resolves a command name to a runnable path. Names containing '/' are
+// treated as direct paths (relative or absolute); anything else is looked
+// up in each PATH entry in order, first hit wins.
 std::optional<std::string> getExecutablePath(const std::string& command) {
     if (utils::isAbsolutePath(command) || utils::isRelativePath(command)) {
         if (command.find('/') != std::string::npos && isExecutable(command)) {
@@ -47,6 +50,9 @@ bool commandExists(const std::string& command) {
 
 #ifdef _WIN32
 
+// Windows has no fork/exec pair, so the whole command line is assembled as
+// one string and handed to CreateProcessW. Args are double-quoted because
+// the child's CRT re-splits the line on spaces.
 int run(const std::string& command, const std::vector<std::string>& args) {
     STARTUPINFOW si{};
     si.cb = sizeof(STARTUPINFOW);
@@ -79,6 +85,9 @@ int run(const std::string& command, const std::vector<std::string>& args) {
 
 #else
 
+// POSIX split: fork, then execvp in the child. The exec only returns if it
+// failed, which the child reports and exits on; the parent just waits and
+// decodes the exit status.
 int run(const std::string& command, const std::vector<std::string>& args) {
     std::vector<char*> cArgs;
     cArgs.push_back(const_cast<char*>(command.c_str()));

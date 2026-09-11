@@ -19,6 +19,8 @@ int lastExitStatus = 0;
 namespace {
 
 void insertPair(std::string_view pair) {
+    // Splits "NAME=value" at the first '='. Entries with no '=' (or an empty
+    // name, like Windows' hidden per-drive "=C:=..." vars) are skipped.
     size_t eq = pair.find('=');
     if (eq == std::string_view::npos || eq == 0) {
         return; // skip malformed entries and Windows' "=C:=..." per-drive vars
@@ -29,6 +31,9 @@ void insertPair(std::string_view pair) {
 } // namespace
 
 void loadFromEnvironment() {
+    // Windows exposes the environment as a double-null-terminated block of
+    // wide strings; POSIX hands us a char* array directly. PATH separators
+    // also differ (';' vs ':'), so each branch picks its own.
 #ifdef _WIN32
     LPWCH envBlock = GetEnvironmentStringsW();
     if (envBlock != nullptr) {

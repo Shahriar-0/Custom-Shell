@@ -75,6 +75,9 @@ std::string removeQuotes(std::string_view str) {
 }
 
 std::vector<std::string> tokenize(std::string_view str, char delimiter) {
+    // Quote/escape-aware splitter. Quotes are stripped as they are consumed,
+    // so "a b" arrives as one token `a b`. Note: an unterminated quote is
+    // silently accepted here — the real lexer in parser/ rejects it.
     std::vector<std::string> result;
     std::string token;
 
@@ -137,6 +140,8 @@ namespace {
 // Portable '*'/'?' wildcard match (no POSIX fnmatch dependency).
 // '*' matches any run of characters, '?' matches exactly one.
 bool matchesWildcard(std::string_view name, std::string_view pattern) {
+    // Two-pointer wildcard match with one-star backtracking: remember where
+    // the last '*' sits and retry from just after it on mismatch.
     size_t n = 0, p = 0;
     size_t starIdx = std::string_view::npos, matchIdx = 0;
 

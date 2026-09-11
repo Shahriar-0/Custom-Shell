@@ -59,6 +59,7 @@ int clear(const std::vector<std::string>&) {
 }
 
 int type(const std::vector<std::string>& args) {
+    // Resolution order mirrors execution: builtins shadow PATH executables.
     if (args.empty()) {
         std::cout << "Usage: type [command]\n";
         return 1;
@@ -83,6 +84,8 @@ int pwd(const std::vector<std::string>&) {
 }
 
 int cd(const std::vector<std::string>& args) {
+    // No argument means home, same as bash. A leading '~' is expanded before
+    // any path checks; everything else goes through the normal path join.
     std::string target = args.empty() ? "~" : args[0];
 
     target = utils::expandHome(target);
