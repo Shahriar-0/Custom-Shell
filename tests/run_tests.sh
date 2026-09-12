@@ -41,8 +41,11 @@ run() {
 }
 
 # check <name> <expected> <actual-value> <where>
-#   where: out (default) | err  -> $3 ignored, matched against captured output
+#   where: out (default) | err  -> matched against $OUT / $ERR; $3 is IGNORED
 #          rc                   -> $3 is the real exit status, exact match vs $2
+# NOTE: for out/err the match is always against the captured globals. To
+# compare a transformed value (e.g. normalized paths), assign it to OUT/ERR
+# first — passing it as $3 silently does nothing.
 # An empty <expected> means "nothing at all" and is matched exactly, not as
 # a (trivially-true-for-any-string) empty substring.
 check() {
@@ -114,14 +117,17 @@ check "echo args"            "hello world" "$OUT"
 # don't cause a false failure.
 expected_cwd="$(norm_path "$(pwd -W 2>/dev/null || pwd)")"
 run 'pwd\n'
-check "pwd prints a path"    "$expected_cwd" "$(norm_path "$OUT")"
+# check() matches $OUT verbatim, so normalize the capture in place first — a
+# normalized value passed as $3 would be ignored (see check's NOTE above).
+OUT="$(norm_path "$OUT")"
+check "pwd prints a path"    "$expected_cwd" "$OUT"
 
 run 'type echo\n'
 check "type finds builtin"   "shell builtin" "$OUT"
 
 run 'nosuchcmd_xyz\n'
 check "unknown command msg"  "command not found" "$ERR" err
-check "unknown command rc"   "" "$( [ $RC -eq 127 ] && echo ok )" rc
+check "unknown command rc"   "127" "$RC" rc
 
 # ---------- quoting ----------
 
@@ -204,9 +210,10 @@ syntax_error_case() {
     local name="$1" script="$2"
     run "$script"
     check "$name: message"   "syntax error" "$ERR" err
-    check "$name: status 2"  "2" "$( [ "$RC" -eq 2 ] && echo 2 )" rc
-    # REPL survived: a fresh prompt was printed after the error line
-    check "$name: survives"  "2" "$( [ "${PROMPTS:-0}" -ge 2 ] && echo 2 )" rc
+    check "$name: status 2"  "2" "$RC" rc
+    # REPL survived: a fresh prompt was printed after the error line.
+    # check() only does exact rc matches, so fold ">= 2 prompts" into 2/0.
+    check "$name: survives"  "2" "$(( ${PROMPTS:-0} >= 2 ? 2 : 0 ))" rc
 }
 
 syntax_error_case "leading pipe"        '| cmd\n'
@@ -239,16 +246,16 @@ check "background reports stub"   "not implemented yet" "$ERR" err
 
 printf 'exit 3\n' | "$BIN" >/dev/null 2>&1
 rc=$?
-check "exit propagates status"  "3" "$( [ $rc -eq 3 ] && echo 3 )" rc
+check "exit propagates status"  "3" "$rc" rc
 
 printf 'exit\n' | "$BIN" >/dev/null 2>&1
 rc=$?
-check "bare exit is success"    "0" "$( [ $rc -eq 0 ] && echo 0 )" rc
+check "bare exit is success"    "0" "$rc" rc
 
 # EOF (Ctrl+D) exits cleanly with last status
 printf 'echo bye\n' | "$BIN" >/dev/null 2>&1
 rc=$?
-check "EOF exits with last status" "0" "$( [ $rc -eq 0 ] && echo 0 )" rc
+check "EOF exits with last status" "0" "$rc" rc
 
 # ---------- cleanup any file the redirect test may have created ----------
 rm -f f.txt

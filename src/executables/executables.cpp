@@ -53,13 +53,13 @@ bool commandExists(const std::string& command) {
 // Windows has no fork/exec pair, so the whole command line is assembled as
 // one string and handed to CreateProcessW. Args are double-quoted because
 // the child's CRT re-splits the line on spaces.
-int run(const std::string& command, const std::vector<std::string>& args) {
+int run(const parser::Command& cmd) {
     STARTUPINFOW si{};
     si.cb = sizeof(STARTUPINFOW);
     PROCESS_INFORMATION pi{};
 
-    std::string cmdLineStr = command;
-    for (const auto& arg : args) {
+    std::string cmdLineStr = cmd.program;
+    for (const auto& arg : cmd.args) {
         cmdLineStr += " \"" + arg + "\"";
     }
 
@@ -88,18 +88,18 @@ int run(const std::string& command, const std::vector<std::string>& args) {
 // POSIX split: fork, then execvp in the child. The exec only returns if it
 // failed, which the child reports and exits on; the parent just waits and
 // decodes the exit status.
-int run(const std::string& command, const std::vector<std::string>& args) {
+int run(const parser::Command& cmd) {
     std::vector<char*> cArgs;
-    cArgs.push_back(const_cast<char*>(command.c_str()));
-    for (const auto& arg : args) {
+    cArgs.push_back(const_cast<char*>(cmd.program.c_str()));
+    for (const auto& arg : cmd.args) {
         cArgs.push_back(const_cast<char*>(arg.c_str()));
     }
     cArgs.push_back(nullptr);
 
     pid_t pid = fork();
     if (pid == 0) {
-        execvp(command.c_str(), cArgs.data());
-        std::cerr << std::format("{}: {}\n", command, strerror(errno));
+        execvp(cmd.program.c_str(), cArgs.data());
+        std::cerr << std::format("{}: {}\n", cmd.program, strerror(errno));
         std::exit(EXIT_FAILURE);
     }
     if (pid > 0) {

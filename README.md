@@ -1,107 +1,72 @@
 # Custom Shell
 
-This is a custom shell implementation in C++ that simulates the behavior of a shell like `bash` or `zsh`.
+A custom POSIX-style shell in C++23 (CMake build → `build/shell.exe`), portable across Windows and POSIX via `#ifdef`. Currently: a real lexer → recursive-descent parser → executor pipeline with quoting, `;`/`&&`/`||` chaining, and a builtin set — plus a 61-assertion integration suite pinning it all.
 
-## How to use
+## Build & run
 
-To use the custom shell, simply compile the source code and run the resulting executable.
+```sh
+cmake -B build            # existing cache: Unix Makefiles, ucrt64 g++
+cmake --build build
+printf 'echo hi\nexit\n' | ./build/shell.exe
+```
 
-## Features
+> **Windows note:** the exe links ucrt64 runtime DLLs, so `C:\msys64\ucrt64\bin` must be on `PATH` at runtime or it dies with `0xC0000139`. Any MSYS shell has it; from PowerShell/cmd prepend it first. In MSYS bash that's `export PATH="/c/msys64/ucrt64/bin:$PATH"` (POSIX form — the `C:...` form doesn't resolve in bash). See `NOTES.md` for details.
 
-- [x] Create a simple shell
-  - [ ] Basic shell loop
-  - [x] Parse user input
-  - [x] Execute commands
-  - [ ] Handle errors
-- [ ] Add navigation
-  - [x] `cd` (Change directory)
-  - [x] `pwd` (Print working directory)
-  - [ ] `ls` (List directory contents)
-    - [ ] Handle flags (e.g., `-l`, `-a`)
-    - [ ] Handle file sorting
-    - [ ] Format output (columns, colors)
-  - [ ] `mkdir` (Make directory)
-  - [ ] `rmdir` (Remove directory)
-- [ ] Add quotes
-  - [x] Single quotes (`'`)
-  - [x] Double quotes (`"`)
-  - [x] Escape characters inside quotes
-  - [x] Support for escaping special characters
-- [ ] Variable interpolation
-  - [ ] `$variable` syntax
-  - [ ] Handle special variables like `$?`, `$$`, `$PATH`
-  - [ ] Support for environment variables
-  - [ ] Handle whitespace around variables
-- [ ] IO Redirection
-  - [ ] Output redirection (`>`, `>>`)
-    - [ ] Overwrite vs append
-  - [ ] Input redirection (`<`)
-  - [ ] Pipe (`|`)
-    - [ ] Multiple pipes
-    - [ ] Handle errors from piped commands
-- [ ] History
-  - [ ] Store command history in a file (e.g., `.bash_history`)
-  - [ ] Access history with `history` command
-  - [ ] Re-run previous commands with `!number`
-  - [ ] Clear history
-  - [ ] Search through history (`Ctrl + R`)
-- [ ] Job Control
-  - [ ] Background processes (`&`)
-  - [ ] List background jobs (`jobs`)
-  - [ ] Bring jobs to the foreground (`fg`)
-  - [ ] Send jobs to the background (`bg`)
-  - [ ] Kill processes (`kill`)
-  - [ ] Stop processes (`Ctrl + Z`)
-  - [ ] Handle job states (running, stopped, etc.)
-- [ ] Auto Completion
-  - [ ] File path completion (e.g., `Tab` to complete filenames)
-  - [ ] Command name completion
-  - [ ] History-based completion (e.g., `!command` to complete previous commands)
-  - [ ] Handle directory navigation (e.g., `cd` completion)
-- [ ] Cursor Positioning
-  - [ ] Moving the cursor with arrow keys (up, down, left, right)
-  - [ ] Edit mode (backspace, delete, etc.)
-  - [ ] Handle cursor positioning with `Ctrl + A` (beginning of line), `Ctrl + E` (end of line)
-  - [ ] Handle `Ctrl + U`, `Ctrl + K` (delete line, delete to end of line)
-  - [ ] Handle `Ctrl + W` (delete word)
-  - [ ] Handle `Ctrl + L` (clear screen)
-- [ ] Signal Handling
-  - [ ] Handle `SIGINT` (Ctrl + C)
-  - [ ] Handle `SIGTSTP` (Ctrl + Z)
-  - [ ] Handle `SIGQUIT` (Ctrl + \)
-  - [ ] Handle `SIGCHLD` (child process state change)
-- [ ] Background Process Management
-  - [ ] Wait for background jobs to finish
-  - [ ] Capture and display background process output
-- [ ] Custom Aliases
-  - [ ] Support for creating custom commands (e.g., `alias ll='ls -l'`)
-  - [ ] Handle removing aliases (e.g., `unalias`)
-- [ ] Command Substitution
-  - [ ] `$()` for command substitution
-  - [ ] Backticks `` `command` `` for command substitution
-- [ ] Error Handling
-  - [ ] Return status codes for each command
-  - [ ] Display error messages for failed commands
-  - [ ] Handle unknown commands gracefully
-  - [ ] Use `set -e` to exit on error (optional)
-- [ ] Scripting Features
-  - [ ] Support for writing shell scripts
-  - [ ] Execute shell scripts (`./script.sh`)
-  - [ ] Looping constructs (`for`, `while`)
-  - [ ] Conditional statements (`if`, `else`, `elif`)
-  - [ ] Functions
-  - [ ] User-defined functions
-- [ ] Advanced Features
-  - [ ] Input/output redirection with append (`>>`, `<`)
-  - [ ] Conditional execution (`&&`, `||`)
-  - [ ] Grouping commands (`{ command1; command2; }`)
-  - [ ] Process substitution (`<(command)` and `>(command)`)
-  - [ ] `exec` for replacing shell with a command
-- [ ] Support for External Commands
-  - [ ] External command execution (e.g., `grep`, `echo`)
-  - [ ] Search for external commands in `$PATH`
-  - [ ] Handling command arguments
-- [ ] Debugging Features
-  - [ ] Debug mode for scripts
-  - [ ] Trace execution (`set -x`)
-  - [ ] Print variable values (`set -v`)
+Tests (no WSL needed — the `.ps1` uses MSYS2 bash under the hood):
+
+```sh
+bash tests/run_tests.sh       # POSIX / MSYS2
+.\tests\run_tests.ps1         # PowerShell
+```
+
+61 assertions covering quoting, connectors, comments, syntax-error recovery,
+stubs, and `exit`/EOF semantics — all passing via either runner.
+
+## What works today
+
+- **REPL** (`src/main.cpp`): lex → parse → execute per line. A line with a syntax error never partially runs — it prints `myshell: syntax error: <msg> (column N)`, sets `$? = 2`, and the REPL continues. EOF (Ctrl+D) exits cleanly with the last status.
+- **Builtins**: `exit` (incl. `exit <code>`), `echo`, `help`, `clear`, `type`, `pwd`, `cd` (absolute / relative / `~`, bare `cd` → `$HOME`). Unknown commands → `command not found`, exit `127`.
+- **Quoting** (lexer, `src/parser/lexer.cpp`): single quotes fully literal, double quotes group (backslash escapes only `\"`, `\\`, `$`, backtick/newline), backslash escapes operators outside quotes, adjacent segments join, `#` comments, tab separates words. Per-char quote provenance is recorded for future `$VAR` expansion.
+- **Chaining**: `;` sequencing plus `&&` / `||` short-circuit driven by the *incoming* connector and real exit statuses (regression-tested, incl. `false && X || Y` chains).
+- **Parsed but explicitly stubbed** (fail loudly with `not implemented yet`, `$? = 2`, instead of silently misbehaving): `>` / `>>` / `<` redirection, multi-stage `|` pipelines, trailing-`&` backgrounding. `( )` are rejected as reserved syntax.
+- **Exit codes**: `127` not found, `2` syntax/usage/not-implemented, `0` success; tracked in `variables::lastExitStatus` (the future `$?`).
+
+## Roadmap
+
+Canonical plan: `.hermes/ROADMAP.md` (ordered by dependency, with a CodeCrafters 76-stage mapping in Appendix A). `docs/shell-foundations.md` holds the design notes; `.hermes/DECISIONS.md` logs past decisions.
+
+| Phase | Status |
+|---|---|
+| 0 — Stabilization | ✅ done |
+| 1 — `Command`/`Pipeline` AST + lexer/parser/executor | ✅ done |
+| 1b — Quoting | ✅ done |
+| 12 (part) — `&&`/`\|\|`/`;` short-circuit | ✅ done (landed early) |
+| 2 — I/O redirection (`>`, `>>`, `<`, per-fd) | ⬅️ next |
+| 3 — Pipes | not started |
+| 4 — Variable expansion (`$VAR`, `${VAR}`, `$?`, `$$`) | not started |
+| 5 — Exit status formalization | not started |
+| 6 — Job control (`&`, `jobs`, `fg`, `bg`, `kill`) | not started |
+| 7 — History | not started |
+| 8 — Line editing / completion | not started (parallel track) |
+| 9 — Aliases | not started |
+| 10 — Command substitution | not started |
+| 11 — Scripting (`if`/`for`/`while`, functions) | not started |
+| 12 (rest) — `{ }` grouping, `exec`, process substitution | not started |
+| 13 — Misc builtins (`ls`, `mkdir`, `rmdir`, `set -x/-v`) | not started |
+
+## Layout
+
+```
+src/main.cpp            REPL: lex → parse → execute
+src/parser/             lexer, recursive-descent parser, AST (Command/Pipeline/CommandLine)
+src/executor/           walks CommandLine: connectors + single-command dispatch
+src/builtin_commands/   exit echo help clear type pwd cd
+src/executables/        PATH lookup + external execution
+src/variables/          ENVs, PATHs, lastExitStatus
+src/utils/              legacy splitter (unused by main), expandHome, glob helpers
+tests/run_tests.sh / .ps1   61-assertion integration suite (pipes stdin, checks stdout/stderr/exit)
+docs/shell-foundations.md   design reference (Brennan lsh + Crafting Interpreters)
+.hermes/ROADMAP.md      canonical roadmap   .hermes/DECISIONS.md  decision log
+```
+
+One module per folder, each its own static lib (`-Wall -Wextra`). Known toolchain quirk: MSYS2 MinGW GCC ships no `libasan`/`libubsan`, so sanitizers are POSIX-only in `CMakeLists.txt` (Windows Debug is plain `-g`).

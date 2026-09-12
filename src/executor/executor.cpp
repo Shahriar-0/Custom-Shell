@@ -31,14 +31,12 @@ int runCommand(const parser::Command& cmd, bool background) {
         // fall through and run in foreground for now
     }
 
-    const auto& args = cmd.args;
-
     if (auto it = shell_builtin_commands::shell_builtin_cmds.find(cmd.program);
         it != shell_builtin_commands::shell_builtin_cmds.end()) {
-        return it->second(args);
+        return it->second(cmd);
     }
     if (executables::commandExists(cmd.program)) {
-        return executables::run(cmd.program, args);
+        return executables::run(cmd);
     }
     std::cerr << cmd.program << ": command not found\n";
     return 127;

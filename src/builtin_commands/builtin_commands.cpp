@@ -25,26 +25,26 @@ bool shellBuiltinCommandExists(const std::string& command) {
     return shell_builtin_cmds.contains(command);
 }
 
-int echo(const std::vector<std::string>& args) {
-    std::cout << utils::join(args, " ") << "\n";
+int echo(const parser::Command& cmd) {
+    std::cout << utils::join(cmd.args, " ") << "\n";
     return 0;
 }
 
-int shellExit(const std::vector<std::string>& args) {
+int shellExit(const parser::Command& cmd) {
     int status = 0;
-    if (!args.empty()) {
+    if (!cmd.args.empty()) {
         try {
-            status = std::stoi(args[0]);
+            status = std::stoi(cmd.args[0]);
         }
         catch (const std::exception&) {
-            std::cerr << std::format("exit: {}: numeric argument required\n", args[0]);
+            std::cerr << std::format("exit: {}: numeric argument required\n", cmd.args[0]);
             std::exit(2);
         }
     }
     std::exit(status);
 }
 
-int help(const std::vector<std::string>&) {
+int help(const parser::Command&) {
     std::cout << "Available commands:\n";
     for (const auto& [name, fn] : shell_builtin_cmds) {
         std::cout << "  " << name << "\n";
@@ -52,20 +52,20 @@ int help(const std::vector<std::string>&) {
     return 0;
 }
 
-int clear(const std::vector<std::string>&) {
+int clear(const parser::Command&) {
     // ANSI clear-screen + move cursor home.
     std::cout << "\033[2J\033[H";
     return 0;
 }
 
-int type(const std::vector<std::string>& args) {
+int type(const parser::Command& cmd) {
     // Resolution order mirrors execution: builtins shadow PATH executables.
-    if (args.empty()) {
+    if (cmd.args.empty()) {
         std::cout << "Usage: type [command]\n";
         return 1;
     }
 
-    const std::string& command = args[0];
+    const std::string& command = cmd.args[0];
     if (shellBuiltinCommandExists(command)) {
         std::cout << std::format("{} is a shell builtin\n", command);
         return 0;
@@ -78,15 +78,15 @@ int type(const std::vector<std::string>& args) {
     return 1;
 }
 
-int pwd(const std::vector<std::string>&) {
+int pwd(const parser::Command&) {
     std::cout << std::filesystem::current_path().string() << "\n";
     return 0;
 }
 
-int cd(const std::vector<std::string>& args) {
+int cd(const parser::Command& cmd) {
     // No argument means home, same as bash. A leading '~' is expanded before
     // any path checks; everything else goes through the normal path join.
-    std::string target = args.empty() ? "~" : args[0];
+    std::string target = cmd.args.empty() ? "~" : cmd.args[0];
 
     target = utils::expandHome(target);
     if (utils::isHomePath(target)) {
