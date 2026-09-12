@@ -1,6 +1,6 @@
 # Custom Shell
 
-A custom POSIX-style shell in C++23 (CMake build → `build/shell.exe`), portable across Windows and POSIX via `#ifdef`. Currently: a real lexer → recursive-descent parser → executor pipeline with quoting, `;`/`&&`/`||` chaining, and a builtin set — plus a 61-assertion integration suite pinning it all.
+A custom POSIX-style shell in C++23 (CMake build → `build/shell.exe`), portable across Windows and POSIX via `#ifdef`. Currently: a real lexer → recursive-descent parser → executor pipeline with quoting, `;`/`&&`/`||` chaining, and a builtin set — plus a 73-assertion integration suite pinning it all.
 
 ## Build & run
 
@@ -19,13 +19,15 @@ bash tests/run_tests.sh       # POSIX / MSYS2
 .\tests\run_tests.ps1         # PowerShell
 ```
 
-61 assertions covering quoting, connectors, comments, syntax-error recovery,
-stubs, and `exit`/EOF semantics — all passing via either runner.
+73 assertions covering quoting, connectors, comments, syntax-error recovery,
+stubs, builtin arg edges, a real external run, Windows extension lookup,
+and `exit`/EOF semantics — all passing via either runner.
 
 ## What works today
 
 - **REPL** (`src/main.cpp`): lex → parse → execute per line. A line with a syntax error never partially runs — it prints `myshell: syntax error: <msg> (column N)`, sets `$? = 2`, and the REPL continues. EOF (Ctrl+D) exits cleanly with the last status.
-- **Builtins**: `exit` (incl. `exit <code>`), `echo`, `help`, `clear`, `type`, `pwd`, `cd` (absolute / relative / `~`, bare `cd` → `$HOME`). Unknown commands → `command not found`, exit `127`.
+- **Builtins**: `exit` (incl. `exit <code>`; extra args refused, shell stays alive), `echo`, `help`, `clear`, `type` (resolves every arg), `pwd`, `cd` (absolute / relative / `~`, bare `cd` → `$HOME`; extra args refused). Unknown commands → `command not found`, exit `127`.
+- **Externals**: PATH search plus arg passing, verified by a real run in the suite; on Windows, bare names resolve via PATHEXT probing (`hostname` finds `hostname.exe`).
 - **Quoting** (lexer, `src/parser/lexer.cpp`): single quotes fully literal, double quotes group (backslash escapes only `\"`, `\\`, `$`, backtick/newline), backslash escapes operators outside quotes, adjacent segments join, `#` comments, tab separates words. Per-char quote provenance is recorded for future `$VAR` expansion.
 - **Chaining**: `;` sequencing plus `&&` / `||` short-circuit driven by the *incoming* connector and real exit statuses (regression-tested, incl. `false && X || Y` chains).
 - **Parsed but explicitly stubbed** (fail loudly with `not implemented yet`, `$? = 2`, instead of silently misbehaving): `>` / `>>` / `<` redirection, multi-stage `|` pipelines, trailing-`&` backgrounding. `( )` are rejected as reserved syntax.
@@ -64,7 +66,7 @@ src/builtin_commands/   exit echo help clear type pwd cd
 src/executables/        PATH lookup + external execution
 src/variables/          ENVs, PATHs, lastExitStatus
 src/utils/              legacy splitter (unused by main), expandHome, glob helpers
-tests/run_tests.sh / .ps1   61-assertion integration suite (pipes stdin, checks stdout/stderr/exit)
+tests/run_tests.sh / .ps1   73-assertion integration suite (pipes stdin, checks stdout/stderr/exit)
 docs/shell-foundations.md   design reference (Brennan lsh + Crafting Interpreters)
 .hermes/ROADMAP.md      canonical roadmap   .hermes/DECISIONS.md  decision log
 ```

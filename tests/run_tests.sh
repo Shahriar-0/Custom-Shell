@@ -242,6 +242,46 @@ check "pipe reports stub"         "pipes: not implemented yet" "$ERR" err
 run 'echo hi &\n'
 check "background reports stub"   "not implemented yet" "$ERR" err
 
+# ---------- builtin argument edges (bash behavior) ----------
+
+run 'cd /tmp extra-arg\n'
+check "cd rejects extra args"  "too many arguments" "$ERR" err
+check "cd extra args rc"       "1" "$RC" rc
+
+run 'type echo nosuchcmd_xyz\n'
+check "type resolves each arg"   "shell builtin" "$OUT"
+check "type reports the missing" "not found" "$ERR" err
+check "type multi-arg rc"        "1" "$RC" rc
+
+# bash refuses to exit on extra args: message, status 1, shell stays alive
+run 'exit 1 2\necho still-here\n'
+check "exit refuses extra args"  "too many arguments" "$ERR" err
+check "exit extra args survives" "still-here" "$OUT"
+
+# ---------- real external execution ----------
+
+# `true` is the closest thing to a universal external; skip where absent
+# rather than failing on platforms that don't ship it.
+if command -v true >/dev/null 2>&1; then
+    run 'true\n'
+    check "external runs silent"  "" "$OUT"
+    check "external no errors"    "" "$ERR" err
+    check "external rc 0"         "0" "$RC" rc
+else
+    printf 'skip: no `true` on PATH\n'
+fi
+
+# Windows-only: bare names resolve via PATHEXT probing. Lookup only, never
+# executed — a bare `cmd` with no args would hang waiting on stdin.
+if command -v cmd.exe >/dev/null 2>&1; then
+    run 'type cmd\n'
+    check "bare Windows name resolves" "cmd.exe" "$OUT"
+fi
+if command -v hostname >/dev/null 2>&1; then
+    run 'hostname\n'
+    checknot "extensionless lookup works" "command not found" err
+fi
+
 # ---------- exit builtin ----------
 
 printf 'exit 3\n' | "$BIN" >/dev/null 2>&1

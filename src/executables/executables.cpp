@@ -4,6 +4,8 @@
 #include <cstring>
 #include <format>
 #include <iostream>
+#include <string>
+#include <vector>
 
 #include "utils/utils.hpp"
 #include "variables/variables.hpp"
@@ -26,19 +28,68 @@ bool isExecutable(const std::filesystem::path& path) {
            (status.permissions() & std::filesystem::perms::owner_exec) != std::filesystem::perms::none;
 }
 
-// Resolves a command name to a runnable path. Names containing '/' are
-// treated as direct paths (relative or absolute); anything else is looked
-// up in each PATH entry in order, first hit wins.
-std::optional<std::string> getExecutablePath(const std::string& command) {
-    if (utils::isAbsolutePath(command) || utils::isRelativePath(command)) {
-        if (command.find('/') != std::string::npos && isExecutable(command)) {
-            return command;
+#ifdef _WIN32
+// PATHEXT lists suffixes in resolution order (".COM;.EXE;.BAT;.CMD" by
+// default). Windows stores it uppercase; we lowercase on the way in so
+// resolved paths come out looking like "cmd.exe" instead of "cmd.EXE" —
+// cosmetic only, since the filesystem itself is case-insensitive either way.
+std::vector<std::string> pathExtensions() {
+    auto toLower = [](std::string s) {
+        for (char& c : s) {
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
         }
+        return s;
+    };
+    if (auto it = variables::ENVs.find("PATHEXT"); it != variables::ENVs.end() && !it->second.empty()) {
+        std::vector<std::string> exts = utils::split(it->second, ';');
+        for (auto& ext : exts) {
+            ext = toLower(ext);
+        }
+        return exts;
     }
+    return {".com", ".exe", ".bat", ".cmd"};
+}
+#endif
+
+// All filenames worth trying for a given base path: the bare name, plus
+// PATHEXT-suffixed variants on Windows. POSIX has no notion of an implicit
+// executable extension, so it's just the base path itself.
+std::vector<std::string> candidatePaths(const std::string& base) {
+#ifdef _WIN32
+    std::vector<std::string> candidates{base};
+    for (const auto& ext : pathExtensions()) {
+        candidates.push_back(base + ext);
+    }
+    return candidates;
+#else
+    return {base};
+#endif
+}
+
+// Resolves a command name to a runnable path. Names containing a path
+// separator are treated as direct paths (relative or absolute) and never
+// searched on PATH; anything else is looked up in each PATH entry in order,
+// first hit wins.
+std::optional<std::string> getExecutablePath(const std::string& command) {
+    auto tryDirect = [](const std::string& path) -> std::optional<std::string> {
+        for (const auto& candidate : candidatePaths(path)) {
+            if (isExecutable(candidate)) {
+                return candidate;
+            }
+        }
+        return std::nullopt;
+    };
+
+    if (command.find('/') != std::string::npos || command.find('\\') != std::string::npos) {
+        // A literal '~' passes through unexpanded here — only cd and
+        // friends expand home today; executables take the path as written.
+        return tryDirect(command);
+    }
+
     for (const auto& path : variables::PATHs) {
-        std::filesystem::path candidate = std::filesystem::path(path) / command;
-        if (isExecutable(candidate)) {
-            return candidate.string();
+        std::string candidate = (std::filesystem::path(path) / command).string();
+        if (auto hit = tryDirect(candidate); hit.has_value()) {
+            return hit;
         }
     }
     return std::nullopt;
@@ -110,7 +161,6 @@ int run(const parser::Command& cmd) {
     std::cerr << std::format("fork failed: {}\n", strerror(errno));
     return -1;
 }
-
 #endif
 
 } // namespace executables

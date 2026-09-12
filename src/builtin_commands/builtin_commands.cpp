@@ -31,6 +31,11 @@ int echo(const parser::Command& cmd) {
 }
 
 int shellExit(const parser::Command& cmd) {
+    if (cmd.args.size() > 1) {
+        // Like bash: refuse to exit, report status 1, shell stays alive.
+        std::cerr << "exit: too many arguments\n";
+        return 1;
+    }
     int status = 0;
     if (!cmd.args.empty()) {
         try {
@@ -60,22 +65,27 @@ int clear(const parser::Command&) {
 
 int type(const parser::Command& cmd) {
     // Resolution order mirrors execution: builtins shadow PATH executables.
+    // Like bash, every argument is resolved in turn; the status is nonzero
+    // if any of them is not found.
     if (cmd.args.empty()) {
         std::cout << "Usage: type [command]\n";
         return 1;
     }
 
-    const std::string& command = cmd.args[0];
-    if (shellBuiltinCommandExists(command)) {
-        std::cout << std::format("{} is a shell builtin\n", command);
-        return 0;
+    int status = 0;
+    for (const auto& command : cmd.args) {
+        if (shellBuiltinCommandExists(command)) {
+            std::cout << std::format("{} is a shell builtin\n", command);
+        }
+        else if (auto path = executables::getExecutablePath(command); path.has_value()) {
+            std::cout << std::format("{} is {}\n", command, *path);
+        }
+        else {
+            std::cerr << std::format("{}: not found\n", command);
+            status = 1;
+        }
     }
-    if (auto path = executables::getExecutablePath(command); path.has_value()) {
-        std::cout << std::format("{} is {}\n", command, *path);
-        return 0;
-    }
-    std::cerr << std::format("{}: not found\n", command);
-    return 1;
+    return status;
 }
 
 int pwd(const parser::Command&) {
@@ -86,6 +96,10 @@ int pwd(const parser::Command&) {
 int cd(const parser::Command& cmd) {
     // No argument means home, same as bash. A leading '~' is expanded before
     // any path checks; everything else goes through the normal path join.
+    if (cmd.args.size() > 1) {
+        std::cerr << "cd: too many arguments\n";
+        return 1;
+    }
     std::string target = cmd.args.empty() ? "~" : cmd.args[0];
 
     target = utils::expandHome(target);
