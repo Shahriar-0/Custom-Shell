@@ -1,6 +1,5 @@
 #include "utils.hpp"
 
-#include <algorithm>
 #include <cstdlib>
 
 namespace utils {
