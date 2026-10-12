@@ -5,17 +5,14 @@
 
 namespace executor {
 
-// Executes a parsed command line. Returns the exit status of the last
-// pipeline actually run (bash convention: pipelines skipped by && / ||
-// short-circuiting don't update the status) and updates
-// variables::lastExitStatus to match.
+// Executes a parsed command line, one AND-OR list at a time. Returns the exit
+// status of the last pipeline actually run (bash convention: pipelines
+// skipped by && / || short-circuiting don't update the status) and keeps
+// variables::lastExitStatus up to date after every pipeline, so it always
+// holds the status of the most recent command — across lines too.
 //
-// Phase 1 scope:
-//   - single-command pipelines: builtins and externals, fully working
-//   - multi-stage pipelines (cmd1 | cmd2): reported as not-yet-implemented
-//   - ; / && / || short-circuit logic: fully working
-//   - redirections & backgrounding: parsed and attached, but reported as
-//     not-yet-implemented rather than silently ignored
+// Each Command is turned into an ExpandedCommand (plain strings) right
+// before it runs.
 int execute(const parser::CommandLine& line);
 
 } // namespace executor
