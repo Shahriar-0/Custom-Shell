@@ -19,11 +19,6 @@ bash tests/run_tests.sh       # POSIX / MSYS2
 .\tests\run_tests.ps1         # PowerShell
 ```
 
-117 assertions covering quoting (incl. empty quotes), connectors, comments,
-syntax-error recovery, redirection parsing (fd numbers, operator placement),
-stubs, builtin arg edges, a real external run, Windows extension lookup, and
-`exit`/EOF/`$?` semantics — all passing via either runner.
-
 ## What works today
 
 - **REPL** (`src/main.cpp`): lex → parse → execute per line. A line with a syntax error never partially runs — it prints `myshell: syntax error: <msg> (column N)`, sets `$? = 2`, and the REPL continues. EOF (Ctrl+D) exits cleanly with the last status.

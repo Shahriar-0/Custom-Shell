@@ -1,12 +1,8 @@
-# Phase 1 test runner for PowerShell users.
-#
-# Wraps tests/run_tests.sh so you can just do:
+# Wraps tests/run_tests.sh:
 #   powershell -File tests\run_tests.ps1
 #   .\tests\run_tests.ps1        (if execution policy allows)
 #
-# It does NOT need WSL — it uses the MSYS2 bash that's already installed
-# (same one the build uses). The .sh script handles adding ucrt64's runtime
-# DLLs to PATH itself.
+# The .sh script handles adding ucrt64's runtime DLLs to PATH itself.
 
 $ErrorActionPreference = 'Stop'
 

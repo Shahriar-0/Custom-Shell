@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-# Phase 1 integration tests: pipes lines into the built shell.exe and checks
-# stdout/stderr/exit-status against expectations.
-#
 # Usage:  tests/run_tests.sh            (uses build/shell.exe)
 #         SHELL_BIN=build/shell_static.exe tests/run_tests.sh
 #
@@ -195,6 +192,33 @@ run 'nosuchcmd_xyz && echo skipped2 || echo shown\n'
 check    "&&-then-|| chain: || branch runs"    "shown" "$OUT"
 checknot "&&-then-|| chain: && branch skipped" "skipped2"
 
+# A trailing ';' is valid (only |, && and || need a following command).
+run 'echo a ;\n'
+check "trailing semicolon accepted"    "a" "$OUT"
+check "trailing semicolon: no error"   "" "$ERR" err
+
+# ---------- empty quotes are real, empty arguments ----------
+
+run 'echo a "" b\n'
+check "empty double quotes keep an arg"  "a  b" "$OUT"
+
+run "echo a '' b\n"
+check "empty single quotes keep an arg"  "a  b" "$OUT"
+
+run 'echo ""\n'
+check "lone empty quotes: no syntax error" "" "$ERR" err
+
+# ---------- $? / exit status persists between commands ----------
+
+# Bare `exit` reports the last command's status, not a hardcoded 0.
+printf 'nosuchcmd_xyz\nexit\n' | "$BIN" >/dev/null 2>&1
+rc=$?
+check "bare exit uses last status"   "127" "$rc" rc
+
+printf 'nosuchcmd_xyz\npwd\nexit\n' | "$BIN" >/dev/null 2>&1
+rc=$?
+check "bare exit after later success" "0" "$rc" rc
+
 # ---------- comments & blank input ----------
 
 run '# a comment line\necho visible\n'
@@ -225,7 +249,12 @@ syntax_error_case "empty pipeline slot" 'a | | b\n'
 syntax_error_case "stray paren"         'echo (x)\n'
 syntax_error_case "unclosed double quote" 'echo "open\n'
 syntax_error_case "unclosed single quote" "echo 'open\n"
-syntax_error_case "mid-line ampersand"  'echo a & echo b\n'
+syntax_error_case "double semicolon"    'echo a ;; echo b\n'
+syntax_error_case "semicolon then ampersand" 'echo a ; &\n'
+syntax_error_case "ampersand then semicolon" 'echo a &;\n'
+syntax_error_case "ampersand then ampersand" 'echo a & &\n'
+syntax_error_case "redirect with no command" '> f.txt\n'
+syntax_error_case "fd number out of range" 'echo 9999999999>f.txt\n'
 
 # error must not kill the session: bad line, then a good one still runs
 run 'bad |||\necho still-alive\n'
@@ -242,6 +271,72 @@ check "pipe reports stub"         "pipes: not implemented yet" "$ERR" err
 run 'echo hi &\n'
 check "background reports stub"   "not implemented yet" "$ERR" err
 
+# '&' is a list separator: `a & b` is valid and applies only to `a`. Nothing
+# is really backgrounded yet, so both run (in the foreground, in order).
+run 'echo first & echo second\n'
+check "mid-line & parses: both lists run"   "second" "$OUT"
+check "mid-line & parses: stub notice"      "backgrounding: not implemented yet" "$ERR" err
+checknot "mid-line & is not a syntax error" "syntax error" err
+
+# The '&' backgrounds only the list it ends: the 'ran' list gets no notice.
+run 'pwd ; echo bg &\n'
+checknot "& does not touch the earlier list" "'pwd' will run" err
+check    "& applies to the list it ends"     "'echo' will run in the foreground" "$ERR" err
+
+# ---------- redirection parsing: fd numbers and operator placement ----------
+# Redirections aren't applied for now, but the stub message reports the
+# fd and operator the parser attached, so these pin the parse itself.
+
+run 'echo x > f.txt\n'
+check "'>' defaults to fd 1"          "fd 1 > 'f.txt'" "$ERR" err
+
+run 'echo x >> f.txt\n'
+check "'>>' defaults to fd 1"         "fd 1 >> 'f.txt'" "$ERR" err
+
+run 'cat < in.txt\n'
+check "'<' defaults to fd 0"          "fd 0 < 'in.txt'" "$ERR" err
+
+run 'echo x 2> f.txt\n'
+check "2> is fd 2 (spaced target)"    "fd 2 > 'f.txt'" "$ERR" err
+
+run 'echo x 2>f.txt\n'
+check "2> is fd 2 (attached target)"  "fd 2 > 'f.txt'" "$ERR" err
+
+run 'echo x 2>>f.txt\n'
+check "2>> is fd 2 append"            "fd 2 >> 'f.txt'" "$ERR" err
+
+run 'cat 0<in.txt\n'
+check "0< is fd 0"                    "fd 0 < 'in.txt'" "$ERR" err
+
+# A digit word that is NOT touching the operator is an ordinary argument...
+run 'echo 2 > f.txt\n'
+check "spaced digit is an argument, not an fd" "fd 1 > 'f.txt'" "$ERR" err
+
+# ...and so is one that is quoted, escaped, or only part of a longer word.
+run 'echo "2">f.txt\n'
+check "quoted digit is not an fd"     "fd 1 > 'f.txt'" "$ERR" err
+
+run 'echo \\2>f.txt\n'
+check "escaped digit is not an fd"    "fd 1 > 'f.txt'" "$ERR" err
+
+run 'echo a2>f.txt\n'
+check "digits inside a word are not an fd" "fd 1 > 'f.txt'" "$ERR" err
+
+# Redirections may come before the command name and between its arguments.
+run '> f.txt echo hi\n'
+check "leading redirection parses"    "fd 1 > 'f.txt'" "$ERR" err
+
+run '2>err.txt echo hi\n'
+check "leading fd redirection parses" "fd 2 > 'err.txt'" "$ERR" err
+
+run 'echo a > f.txt b\n'
+check "redirection between args parses" "fd 1 > 'f.txt'" "$ERR" err
+
+# A redirection still counts as "not implemented" when attached to a later
+# pipeline of a && chain (the earlier one runs, status 0, then this stubs).
+run 'pwd && echo x > f.txt\n'
+check "redirection stub inside && chain" "redirection: not implemented yet" "$ERR" err
+
 # ---------- builtin argument edges (bash behavior) ----------
 
 run 'cd /tmp extra-arg\n'
@@ -257,6 +352,15 @@ check "type multi-arg rc"        "1" "$RC" rc
 run 'exit 1 2\necho still-here\n'
 check "exit refuses extra args"  "too many arguments" "$ERR" err
 check "exit extra args survives" "still-here" "$OUT"
+
+# The whole argument must be an integer ("3abc" is an error, not 3), and the
+# shell does exit, with status 2 — like bash.
+run 'exit 3abc\n'
+check "exit rejects trailing junk"   "numeric argument required" "$ERR" err
+check "exit non-numeric status is 2" "2" "$RC" rc
+
+run 'exit abc\n'
+check "exit rejects non-numeric"     "numeric argument required" "$ERR" err
 
 # ---------- real external execution ----------
 
