@@ -7,6 +7,7 @@ add_library(parser
     parser.cpp
     parser.hpp
     token.hpp
+    syntax_error.hpp
     ast.hpp
 )
 

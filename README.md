@@ -1,6 +1,6 @@
 # Custom Shell
 
-A custom POSIX-style shell in C++23 (CMake build → `build/shell.exe`), portable across Windows and POSIX via `#ifdef`. Currently: a real lexer → recursive-descent parser → executor pipeline with quoting, `;`/`&&`/`||` chaining, and a builtin set — plus a 73-assertion integration suite pinning it all.
+A custom POSIX-style shell in C++23 (CMake build → `build/shell.exe`), portable across Windows and POSIX via `#ifdef`. Currently: a real lexer → recursive-descent parser → executor pipeline with quoting, `;`/`&&`/`||` chaining, and a builtin set — plus a 117-assertion integration suite pinning it all.
 
 ## Build & run
 
@@ -19,23 +19,25 @@ bash tests/run_tests.sh       # POSIX / MSYS2
 .\tests\run_tests.ps1         # PowerShell
 ```
 
-73 assertions covering quoting, connectors, comments, syntax-error recovery,
-stubs, builtin arg edges, a real external run, Windows extension lookup,
-and `exit`/EOF semantics — all passing via either runner.
+117 assertions covering quoting (incl. empty quotes), connectors, comments,
+syntax-error recovery, redirection parsing (fd numbers, operator placement),
+stubs, builtin arg edges, a real external run, Windows extension lookup, and
+`exit`/EOF/`$?` semantics — all passing via either runner.
 
 ## What works today
 
 - **REPL** (`src/main.cpp`): lex → parse → execute per line. A line with a syntax error never partially runs — it prints `myshell: syntax error: <msg> (column N)`, sets `$? = 2`, and the REPL continues. EOF (Ctrl+D) exits cleanly with the last status.
-- **Builtins**: `exit` (incl. `exit <code>`; extra args refused, shell stays alive), `echo`, `help`, `clear`, `type` (resolves every arg), `pwd`, `cd` (absolute / relative / `~`, bare `cd` → `$HOME`; extra args refused). Unknown commands → `command not found`, exit `127`.
-- **Externals**: PATH search plus arg passing, verified by a real run in the suite; on Windows, bare names resolve via PATHEXT probing (`hostname` finds `hostname.exe`).
-- **Quoting** (lexer, `src/parser/lexer.cpp`): single quotes fully literal, double quotes group (backslash escapes only `\"`, `\\`, `$`, backtick/newline), backslash escapes operators outside quotes, adjacent segments join, `#` comments, tab separates words. Per-char quote provenance is recorded for future `$VAR` expansion.
-- **Chaining**: `;` sequencing plus `&&` / `||` short-circuit driven by the *incoming* connector and real exit statuses (regression-tested, incl. `false && X || Y` chains).
-- **Parsed but explicitly stubbed** (fail loudly with `not implemented yet`, `$? = 2`, instead of silently misbehaving): `>` / `>>` / `<` redirection, multi-stage `|` pipelines, trailing-`&` backgrounding. `( )` are rejected as reserved syntax.
+- **Builtins**: `exit` (bare `exit` uses the last status; `exit <code>` must be a whole integer, else status 2; extra args refused, shell stays alive), `echo`, `help`, `clear`, `type` (resolves every arg), `pwd`, `cd` (absolute / relative / `~`, bare `cd` → `$HOME`; extra args refused). Unknown commands → `command not found`, exit `127`.
+- **Externals**: PATH search plus arg passing, verified by a real run in the suite; on Windows, bare names resolve via PATHEXT probing (`hostname` finds `hostname.exe`) and the resolved path is what gets launched, with CRT-correct argument quoting. POSIX statuses follow bash: `126`/`127` for exec failures, `128+N` for a child killed by signal N.
+- **Quoting** (lexer, `src/parser/lexer.cpp`): single quotes fully literal, double quotes group (backslash escapes only `\"`, `\\`, `$`, backtick/newline), backslash escapes operators outside quotes, adjacent segments join, empty quotes (`""`, `''`) are real empty arguments, `#` comments, tab separates words. Per-char quote provenance is recorded by the lexer and carried on `Word` through the AST, ready for future `$VAR` expansion.
+- **Chaining**: `;` / `&` separate AND-OR lists (a trailing `;` is fine); inside a list `&&` / `||` short-circuit, driven by the *incoming* connector and real exit statuses (regression-tested, incl. `false && X || Y` chains). `$?` (`variables::lastExitStatus`) is never reset between lines.
+- **Redirection syntax**: `>`, `>>`, `<` with optional fd (`2>f`, `2>>f`, `0<f`; only an unquoted, all-digit word touching the operator counts as an fd), anywhere in a command including before the program name. A command must still have a program (`> f` alone is a syntax error).
+- **Parsed but explicitly stubbed**: `>` / `>>` / `<` redirection and multi-stage `|` pipelines fail loudly with `not implemented yet` and `$? = 2` instead of silently misbehaving. `&` backgrounding is parsed per AND-OR list (`a ; b &` backgrounds only `b`); until Phase 6 it prints a notice and runs in the foreground with the real status. `( )` are rejected as reserved syntax.
 - **Exit codes**: `127` not found, `2` syntax/usage/not-implemented, `0` success; tracked in `variables::lastExitStatus` (the future `$?`).
 
 ## Roadmap
 
-Canonical plan: `.hermes/ROADMAP.md` (ordered by dependency, with a CodeCrafters 76-stage mapping in Appendix A). `docs/shell-foundations.md` holds the design notes; `.hermes/DECISIONS.md` logs past decisions.
+Canonical plan (local, not in git): `.hermes/ROADMAP.md` (ordered by dependency, with a CodeCrafters 76-stage mapping in Appendix A). `docs/shell-foundations.md` holds the design notes; `.hermes/DECISIONS.md` logs past decisions.
 
 | Phase | Status |
 |---|---|
@@ -60,15 +62,15 @@ Canonical plan: `.hermes/ROADMAP.md` (ordered by dependency, with a CodeCrafters
 
 ```
 src/main.cpp            REPL: lex → parse → execute
-src/parser/             lexer, recursive-descent parser, AST (Command/Pipeline/CommandLine)
-src/executor/           walks CommandLine: connectors + single-command dispatch
+src/parser/             lexer, recursive-descent parser, AST (Word/Command/Pipeline/AndOrList/CommandLine), SyntaxError
+src/executor/           walks CommandLine: lists, connectors, expand() Command -> ExpandedCommand, single-command dispatch
 src/builtin_commands/   exit echo help clear type pwd cd
 src/executables/        PATH lookup + external execution
 src/variables/          ENVs, PATHs, lastExitStatus
-src/utils/              legacy splitter (unused by main), expandHome, glob helpers
-tests/run_tests.sh / .ps1   73-assertion integration suite (pipes stdin, checks stdout/stderr/exit)
+src/utils/              split/join, path predicates, expandHome
+tests/run_tests.sh / .ps1   117-assertion integration suite (pipes stdin, checks stdout/stderr/exit)
 docs/shell-foundations.md   design reference (Brennan lsh + Crafting Interpreters)
-.hermes/ROADMAP.md      canonical roadmap   .hermes/DECISIONS.md  decision log
+(local, gitignored:) .hermes/ROADMAP.md canonical roadmap, .hermes/DECISIONS.md decision log, docs/
 ```
 
 One module per folder, each its own static lib (`-Wall -Wextra`). Known toolchain quirk: MSYS2 MinGW GCC ships no `libasan`/`libubsan`, so sanitizers are POSIX-only in `CMakeLists.txt` (Windows Debug is plain `-g`).

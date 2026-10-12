@@ -8,6 +8,7 @@ namespace parser {
 
 enum class TokenType {
     Word,           // a bare word or quoted string
+    IoNumber,       // digits immediately followed by < or > (the fd in 2>file)
     Pipe,           // |
     RedirectOut,    // >
     RedirectAppend, // >>
@@ -15,7 +16,7 @@ enum class TokenType {
     And,            // &&
     Or,             // ||
     Semicolon,      // ;
-    Ampersand,      // & (background marker; only legal at end of input)
+    Ampersand,      // & (background marker / list separator)
     EndOfInput,     // sentinel: no more tokens
 };
 
