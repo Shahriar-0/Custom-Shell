@@ -1,5 +1,6 @@
 #include "builtin_commands.hpp"
 
+#include <cerrno>
 #include <cstdlib>
 #include <filesystem>
 #include <format>
@@ -25,31 +26,38 @@ bool shellBuiltinCommandExists(const std::string& command) {
     return shell_builtin_cmds.contains(command);
 }
 
-int echo(const parser::Command& cmd) {
+int echo(const parser::ExpandedCommand& cmd) {
     std::cout << utils::join(cmd.args, " ") << "\n";
     return 0;
 }
 
-int shellExit(const parser::Command& cmd) {
-    if (cmd.args.size() > 1) {
-        // Like bash: refuse to exit, report status 1, shell stays alive.
-        std::cerr << "exit: too many arguments\n";
-        return 1;
-    }
-    int status = 0;
+int shellExit(const parser::ExpandedCommand& cmd) {
+    // Bare `exit` leaves with the status of the last command (bash's $?),
+    // not a hardcoded 0.
+    int status = variables::lastExitStatus;
     if (!cmd.args.empty()) {
-        try {
-            status = std::stoi(cmd.args[0]);
-        }
-        catch (const std::exception&) {
-            std::cerr << std::format("exit: {}: numeric argument required\n", cmd.args[0]);
+        // Like bash, the first argument must be an integer *in full* ("3abc"
+        // is an error, not 3) and is checked before the argument count; a bad
+        // one exits the shell with status 2.
+        const std::string& arg = cmd.args[0];
+        errno = 0;
+        char* end = nullptr;
+        long value = std::strtol(arg.c_str(), &end, 10);
+        if (arg.empty() || end == arg.c_str() || *end != '\0' || errno == ERANGE) {
+            std::cerr << std::format("exit: {}: numeric argument required\n", arg);
             std::exit(2);
         }
+        if (cmd.args.size() > 1) {
+            // Like bash: refuse to exit, report status 1, shell stays alive.
+            std::cerr << "exit: too many arguments\n";
+            return 1;
+        }
+        status = static_cast<int>(value & 0xFF); // exit statuses are 8 bits
     }
     std::exit(status);
 }
 
-int help(const parser::Command&) {
+int help(const parser::ExpandedCommand&) {
     std::cout << "Available commands:\n";
     for (const auto& [name, fn] : shell_builtin_cmds) {
         std::cout << "  " << name << "\n";
@@ -57,13 +65,13 @@ int help(const parser::Command&) {
     return 0;
 }
 
-int clear(const parser::Command&) {
+int clear(const parser::ExpandedCommand&) {
     // ANSI clear-screen + move cursor home.
     std::cout << "\033[2J\033[H";
     return 0;
 }
 
-int type(const parser::Command& cmd) {
+int type(const parser::ExpandedCommand& cmd) {
     // Resolution order mirrors execution: builtins shadow PATH executables.
     // Like bash, every argument is resolved in turn; the status is nonzero
     // if any of them is not found.
@@ -88,12 +96,12 @@ int type(const parser::Command& cmd) {
     return status;
 }
 
-int pwd(const parser::Command&) {
+int pwd(const parser::ExpandedCommand&) {
     std::cout << std::filesystem::current_path().string() << "\n";
     return 0;
 }
 
-int cd(const parser::Command& cmd) {
+int cd(const parser::ExpandedCommand& cmd) {
     // No argument means home, same as bash. A leading '~' is expanded before
     // any path checks; everything else goes through the normal path join.
     if (cmd.args.size() > 1) {

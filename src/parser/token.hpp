@@ -21,7 +21,7 @@ enum class TokenType {
 };
 
 // Which quoting context each character of a Word token came from.
-// Phase 4 (variable expansion) needs this to decide whether $VAR inside
+// Variable expansion needs this to decide whether $VAR inside
 // a word should expand — POSIX expands in double quotes but not single.
 enum class QuoteKind : char {
     None = 'u',

@@ -2,8 +2,6 @@
 #include <string>
 
 #include "executor/executor.hpp"
-#include "parser/ast.hpp"
-#include "parser/lexer.hpp"
 #include "parser/parser.hpp"
 #include "variables/variables.hpp"
 
@@ -34,16 +32,12 @@ int main() {
         try {
             line = parser::parseLine(input);
         }
-        catch (const parser::LexError& e) {
-            reportSyntaxError(e.message, e.column);
-            continue;
-        }
-        catch (const parser::ParseError& e) {
+        catch (const parser::SyntaxError& e) {
             reportSyntaxError(e.message, e.column);
             continue;
         }
 
-        if (line.pipelines.empty()) {
+        if (line.lists.empty()) {
             continue;
         }
 

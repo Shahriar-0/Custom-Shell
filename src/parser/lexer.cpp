@@ -110,8 +110,7 @@ private:
     }
 
     // Scans one word: bare characters, quoted runs, and backslash escapes
-    // may all be mixed freely ("ab"c'd\' becomes abc'd'). Records per-char
-    // quoting provenance for Phase 4 expansion decisions.
+    // may all be mixed freely ("ab"c'd\' becomes abc'd'). 
     Token lexWord() {
         Token tok = makeToken(TokenType::Word);
         tok.column = startColumn_;

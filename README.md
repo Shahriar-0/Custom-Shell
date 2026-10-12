@@ -32,31 +32,8 @@ stubs, builtin arg edges, a real external run, Windows extension lookup, and
 - **Quoting** (lexer, `src/parser/lexer.cpp`): single quotes fully literal, double quotes group (backslash escapes only `\"`, `\\`, `$`, backtick/newline), backslash escapes operators outside quotes, adjacent segments join, empty quotes (`""`, `''`) are real empty arguments, `#` comments, tab separates words. Per-char quote provenance is recorded by the lexer and carried on `Word` through the AST, ready for future `$VAR` expansion.
 - **Chaining**: `;` / `&` separate AND-OR lists (a trailing `;` is fine); inside a list `&&` / `||` short-circuit, driven by the *incoming* connector and real exit statuses (regression-tested, incl. `false && X || Y` chains). `$?` (`variables::lastExitStatus`) is never reset between lines.
 - **Redirection syntax**: `>`, `>>`, `<` with optional fd (`2>f`, `2>>f`, `0<f`; only an unquoted, all-digit word touching the operator counts as an fd), anywhere in a command including before the program name. A command must still have a program (`> f` alone is a syntax error).
-- **Parsed but explicitly stubbed**: `>` / `>>` / `<` redirection and multi-stage `|` pipelines fail loudly with `not implemented yet` and `$? = 2` instead of silently misbehaving. `&` backgrounding is parsed per AND-OR list (`a ; b &` backgrounds only `b`); until Phase 6 it prints a notice and runs in the foreground with the real status. `( )` are rejected as reserved syntax.
+- **Parsed but explicitly stubbed**: `>` / `>>` / `<` redirection and multi-stage `|` pipelines fail loudly with `not implemented yet` and `$? = 2` instead of silently misbehaving. `&` backgrounding is parsed per AND-OR list (`a ; b &` backgrounds only `b`); until later it prints a notice and runs in the foreground with the real status. `( )` are rejected as reserved syntax.
 - **Exit codes**: `127` not found, `2` syntax/usage/not-implemented, `0` success; tracked in `variables::lastExitStatus` (the future `$?`).
-
-## Roadmap
-
-Canonical plan (local, not in git): `.hermes/ROADMAP.md` (ordered by dependency, with a CodeCrafters 76-stage mapping in Appendix A). `docs/shell-foundations.md` holds the design notes; `.hermes/DECISIONS.md` logs past decisions.
-
-| Phase | Status |
-|---|---|
-| 0 — Stabilization | ✅ done |
-| 1 — `Command`/`Pipeline` AST + lexer/parser/executor | ✅ done |
-| 1b — Quoting | ✅ done |
-| 12 (part) — `&&`/`\|\|`/`;` short-circuit | ✅ done (landed early) |
-| 2 — I/O redirection (`>`, `>>`, `<`, per-fd) | ⬅️ next |
-| 3 — Pipes | not started |
-| 4 — Variable expansion (`$VAR`, `${VAR}`, `$?`, `$$`) | not started |
-| 5 — Exit status formalization | not started |
-| 6 — Job control (`&`, `jobs`, `fg`, `bg`, `kill`) | not started |
-| 7 — History | not started |
-| 8 — Line editing / completion | not started (parallel track) |
-| 9 — Aliases | not started |
-| 10 — Command substitution | not started |
-| 11 — Scripting (`if`/`for`/`while`, functions) | not started |
-| 12 (rest) — `{ }` grouping, `exec`, process substitution | not started |
-| 13 — Misc builtins (`ls`, `mkdir`, `rmdir`, `set -x/-v`) | not started |
 
 ## Layout
 

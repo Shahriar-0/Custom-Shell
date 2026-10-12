@@ -60,7 +60,7 @@ struct ExpandedRedirection {
 struct ExpandedCommand {
     std::string program;
     std::vector<std::string> args;
-    std::vector<ExpandedRedirection> redirections; // applied starting Phase 2
+    std::vector<ExpandedRedirection> redirections;
 };
 
 // One or more commands connected by '|': `cmd1 | cmd2 | cmd3`. Named to

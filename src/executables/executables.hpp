@@ -15,7 +15,7 @@ bool commandExists(const std::string& command);
 std::optional<std::string> getExecutablePath(const std::string& command);
 
 // Runs an expanded command (program + final argument strings) and waits for
-// it. Redirections travel on `cmd` for Phase 2; the executor applies them
+// it. Redirections travel on `cmd` for now; the executor applies them
 // before calling.
 //
 // Returns the child's exit status. Conventions (bash's): 127 if the program

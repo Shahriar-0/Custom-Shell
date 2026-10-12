@@ -49,8 +49,8 @@ parser::ExpandedCommand expand(const parser::Command& cmd) {
     return out;
 }
 
-// Runs one simple command (no pipes). Redirections are parsed but not yet
-// applied — that is Phase 2's job; we refuse to silently ignore them so the
+// Runs one simple command (no pipes). Redirections are parsed but not yet.
+//  we refuse to silently ignore them so the
 // user never thinks a redirect succeeded when it didn't.
 int runCommand(const parser::ExpandedCommand& cmd, bool background) {
     if (!cmd.redirections.empty()) {
@@ -78,7 +78,7 @@ int runCommand(const parser::ExpandedCommand& cmd, bool background) {
     return kNotFound;
 }
 
-// Runs one pipeline. Multi-stage pipelines (cmd1 | cmd2) are Phase 3; a
+// Runs one pipeline. Multi-stage pipelines (cmd1 | cmd2) are for later; a
 // single command is the common case today.
 int runPipeline(const parser::Pipeline& pipeline, bool background) {
     if (pipeline.isMultiStage()) {
