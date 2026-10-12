@@ -1,6 +1,9 @@
 #include "executables.hpp"
 
+#include <algorithm>
+#include <cctype>
 #include <cerrno>
+#include <cstdlib>
 #include <cstring>
 #include <format>
 #include <iostream>
@@ -101,26 +104,74 @@ bool commandExists(const std::string& command) {
 
 #ifdef _WIN32
 
+namespace {
+
+// Quotes one argument for a Windows command line using the rules the MSVC /
+// MinGW CRT uses to split it back apart: wrap in "..." when the argument is
+// empty or contains whitespace or a quote; backslashes are literal unless
+// they precede a quote (or the closing quote), in which case each one is
+// doubled and any quote itself is escaped with one more backslash.
+std::string quoteWindowsArg(const std::string& arg) {
+    if (!arg.empty() && arg.find_first_of(" \t\n\v\"") == std::string::npos) {
+        return arg;
+    }
+    std::string out = "\"";
+    size_t backslashes = 0;
+    for (char c : arg) {
+        if (c == '\\') {
+            ++backslashes;
+            continue;
+        }
+        if (c == '"') {
+            out.append(backslashes * 2 + 1, '\\');
+            out.push_back('"');
+        }
+        else {
+            out.append(backslashes, '\\');
+            out.push_back(c);
+        }
+        backslashes = 0;
+    }
+    out.append(backslashes * 2, '\\'); // they now precede the closing quote
+    out.push_back('"');
+    return out;
+}
+
+} // namespace
+
 // Windows has no fork/exec pair, so the whole command line is assembled as
-// one string and handed to CreateProcessW. Args are double-quoted because
-// the child's CRT re-splits the line on spaces.
-int run(const parser::Command& cmd) {
+// one string and handed to CreateProcessW. The program is the *resolved*
+// path (so `foo` finds foo.cmd / foo.bat the same way `type` reports it,
+// instead of CreateProcess's own .exe-only guessing), and every piece is
+// quoted so the child's CRT splits the line back into exactly these args.
+int run(const parser::ExpandedCommand& cmd) {
+    auto resolved = getExecutablePath(cmd.program);
+    if (!resolved.has_value()) {
+        std::cerr << cmd.program << ": command not found\n";
+        return 127;
+    }
+    std::string program = *resolved;
+    std::replace(program.begin(), program.end(), '/', '\\');
+
+    std::string cmdLineStr = quoteWindowsArg(program);
+    for (const auto& arg : cmd.args) {
+        cmdLineStr += ' ';
+        cmdLineStr += quoteWindowsArg(arg);
+    }
+
+    int wlen = MultiByteToWideChar(CP_UTF8, 0, cmdLineStr.c_str(), -1, nullptr, 0);
+    std::wstring wcmdLine(wlen > 0 ? wlen : 1, L'\0');
+    if (wlen > 0) {
+        MultiByteToWideChar(CP_UTF8, 0, cmdLineStr.c_str(), -1, wcmdLine.data(), wlen);
+    }
+
     STARTUPINFOW si{};
     si.cb = sizeof(STARTUPINFOW);
     PROCESS_INFORMATION pi{};
 
-    std::string cmdLineStr = cmd.program;
-    for (const auto& arg : cmd.args) {
-        cmdLineStr += " \"" + arg + "\"";
-    }
-
-    int wlen = MultiByteToWideChar(CP_UTF8, 0, cmdLineStr.c_str(), -1, nullptr, 0);
-    std::wstring wcmdLine(wlen, L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, cmdLineStr.c_str(), -1, wcmdLine.data(), wlen);
-
     if (!CreateProcessW(nullptr, wcmdLine.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
-        std::cerr << std::format("CreateProcess failed ({}).\n", GetLastError());
-        return -1;
+        std::cerr << std::format("{}: CreateProcess failed ({}).\n", cmd.program, GetLastError());
+        return 126;
     }
 
     WaitForSingleObject(pi.hProcess, INFINITE);
@@ -137,9 +188,11 @@ int run(const parser::Command& cmd) {
 #else
 
 // POSIX split: fork, then execvp in the child. The exec only returns if it
-// failed, which the child reports and exits on; the parent just waits and
-// decodes the exit status.
-int run(const parser::Command& cmd) {
+// failed; the child reports that and leaves with _exit (not exit: this is a
+// forked copy of the shell, and exit() would run the parent's atexit
+// handlers and static destructors a second time, flushing buffers twice).
+// The parent waits and decodes the status the way bash does.
+int run(const parser::ExpandedCommand& cmd) {
     std::vector<char*> cArgs;
     cArgs.push_back(const_cast<char*>(cmd.program.c_str()));
     for (const auto& arg : cmd.args) {
@@ -150,16 +203,28 @@ int run(const parser::Command& cmd) {
     pid_t pid = fork();
     if (pid == 0) {
         execvp(cmd.program.c_str(), cArgs.data());
-        std::cerr << std::format("{}: {}\n", cmd.program, strerror(errno));
-        std::exit(EXIT_FAILURE);
+        int err = errno;
+        std::cerr << std::format("{}: {}\n", cmd.program, strerror(err));
+        _exit(err == ENOENT ? 127 : 126);
     }
     if (pid > 0) {
         int status = 0;
-        waitpid(pid, &status, 0);
-        return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+        while (waitpid(pid, &status, 0) < 0) {
+            if (errno != EINTR) {
+                std::cerr << std::format("waitpid failed: {}\n", strerror(errno));
+                return 1;
+            }
+        }
+        if (WIFEXITED(status)) {
+            return WEXITSTATUS(status);
+        }
+        if (WIFSIGNALED(status)) {
+            return 128 + WTERMSIG(status);
+        }
+        return 1;
     }
     std::cerr << std::format("fork failed: {}\n", strerror(errno));
-    return -1;
+    return 126;
 }
 #endif
 
