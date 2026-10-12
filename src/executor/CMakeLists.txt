@@ -15,6 +15,8 @@ target_link_libraries(executor
     PUBLIC
     parser
     builtin_commands
+    executables
+    variables
 )
 
 target_compile_features(executor

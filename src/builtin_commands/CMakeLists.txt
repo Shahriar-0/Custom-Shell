@@ -14,6 +14,7 @@ target_include_directories(builtin_commands
 
 target_link_libraries(builtin_commands
     PUBLIC
+    parser
     executables
     utils
     variables

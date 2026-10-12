@@ -14,6 +14,7 @@ target_include_directories(executables
 
 target_link_libraries(executables
     PUBLIC
+    parser
     utils
     variables
 )
