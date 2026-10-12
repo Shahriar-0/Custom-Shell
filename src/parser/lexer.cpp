@@ -23,7 +23,7 @@ public:
 
 private:
     [[noreturn]] static void fail(const std::string& message, size_t column) {
-        throw LexError{message, column};
+        throw SyntaxError{message, column};
     }
 
     Token makeToken(TokenType type, std::string text = "", size_t column = 0,
@@ -87,19 +87,17 @@ private:
         return makeToken(TokenType::Pipe, "|");
     }
 
+    // '&&' is the AND connector; a lone '&' is always emitted as Ampersand.
+    // Whether it is legal where it appears (it must follow a command and
+    // may only be followed by another list or end of line) is the parser's
+    // decision.
     Token lexAmpersand() {
         advance();
         if (!atEnd() && peek() == '&') {
             advance();
             return makeToken(TokenType::And, "&&");
         }
-        // Single &: only meaningful as background marker at end of line.
-        // Anything else (& followed by a word/operator) is a syntax error.
-        skipWhitespaceAndComments();
-        if (atEnd()) {
-            return makeToken(TokenType::Ampersand, "&");
-        }
-        fail("'&' is only valid at the end of the line (backgrounding)", startColumn_);
+        return makeToken(TokenType::Ampersand, "&");
     }
 
     Token lexRedirectOut() {
@@ -141,10 +139,30 @@ private:
             }
         }
 
-        if (tok.text.empty()) {
-            fail("unexpected empty word", startColumn_);
+        // A word can only be empty here as "" or '' (lexWord is entered on a
+        // character that is neither whitespace nor an operator, and a bare
+        // character always contributes to the text). Empty quotes are a
+        // legitimate empty argument, so there is nothing to reject.
+
+        // `2>file`: digits that are the *entire* word, none of them quoted
+        // or escaped, touching a redirection operator, name the fd.
+        if (isIoNumber(tok) && !atEnd() && (peek() == '<' || peek() == '>')) {
+            tok.type = TokenType::IoNumber;
         }
         return tok;
+    }
+
+    static bool isIoNumber(const Token& tok) {
+        if (tok.text.empty()) {
+            return false;
+        }
+        for (size_t i = 0; i < tok.text.size(); ++i) {
+            if (tok.text[i] < '0' || tok.text[i] > '9' ||
+                tok.quoteKinds[i] != static_cast<char>(QuoteKind::None)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     // True if this character always starts an operator token outside quotes.
@@ -215,9 +233,10 @@ private:
         }
         char c = peek();
         if (inDoubleQuotes && c != '"' && c != '\\' && c != '$' && c != '`') {
-            // Not a special char: keep backslash literally.
-            appendChar(tok, '\\', QuoteKind::Escape);
-            appendChar(tok, c, QuoteKind::None);
+            // Not a special char: the backslash stays literal, and both it
+            // and the character after it are still inside the double quotes.
+            appendChar(tok, '\\', QuoteKind::Double);
+            appendChar(tok, c, QuoteKind::Double);
             advance();
             return;
         }
