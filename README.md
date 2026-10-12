@@ -1,6 +1,6 @@
 # Custom Shell
 
-A custom POSIX-style shell in C++23 (CMake build → `build/shell.exe`), portable across Windows and POSIX via `#ifdef`. Currently: a real lexer → recursive-descent parser → executor pipeline with quoting, `;`/`&&`/`||` chaining, and a builtin set — plus a 117-assertion integration suite pinning it all.
+A custom POSIX-style shell in C++23 (CMake build → `build/shell.exe`), portable across Windows and POSIX via `#ifdef`. Currently: lexer → recursive-descent parser → executor, with quoting, `;`/`&&`/`||` chaining, a few builtins, and an integration suite in `tests/`.
 
 ## Build & run
 
@@ -24,7 +24,7 @@ bash tests/run_tests.sh       # POSIX / MSYS2
 - **REPL** (`src/main.cpp`): lex → parse → execute per line. A line with a syntax error never partially runs — it prints `myshell: syntax error: <msg> (column N)`, sets `$? = 2`, and the REPL continues. EOF (Ctrl+D) exits cleanly with the last status.
 - **Builtins**: `exit` (bare `exit` uses the last status; `exit <code>` must be a whole integer, else status 2; extra args refused, shell stays alive), `echo`, `help`, `clear`, `type` (resolves every arg), `pwd`, `cd` (absolute / relative / `~`, bare `cd` → `$HOME`; extra args refused). Unknown commands → `command not found`, exit `127`.
 - **Externals**: PATH search plus arg passing, verified by a real run in the suite; on Windows, bare names resolve via PATHEXT probing (`hostname` finds `hostname.exe`) and the resolved path is what gets launched, with CRT-correct argument quoting. POSIX statuses follow bash: `126`/`127` for exec failures, `128+N` for a child killed by signal N.
-- **Quoting** (lexer, `src/parser/lexer.cpp`): single quotes fully literal, double quotes group (backslash escapes only `\"`, `\\`, `$`, backtick/newline), backslash escapes operators outside quotes, adjacent segments join, empty quotes (`""`, `''`) are real empty arguments, `#` comments, tab separates words. Per-char quote provenance is recorded by the lexer and carried on `Word` through the AST, ready for future `$VAR` expansion.
+- **Quoting** (lexer, `src/parser/lexer.cpp`): single quotes fully literal, double quotes group (backslash escapes only `\"`, `\\`, `$`, backtick), backslash escapes operators outside quotes, adjacent segments join, empty quotes (`""`, `''`) are real empty arguments, `#` comments, tab separates words. Per-char quote info is kept on `Word` through the AST for future `$VAR` expansion.
 - **Chaining**: `;` / `&` separate AND-OR lists (a trailing `;` is fine); inside a list `&&` / `||` short-circuit, driven by the *incoming* connector and real exit statuses (regression-tested, incl. `false && X || Y` chains). `$?` (`variables::lastExitStatus`) is never reset between lines.
 - **Redirection syntax**: `>`, `>>`, `<` with optional fd (`2>f`, `2>>f`, `0<f`; only an unquoted, all-digit word touching the operator counts as an fd), anywhere in a command including before the program name. A command must still have a program (`> f` alone is a syntax error).
 - **Parsed but explicitly stubbed**: `>` / `>>` / `<` redirection and multi-stage `|` pipelines fail loudly with `not implemented yet` and `$? = 2` instead of silently misbehaving. `&` backgrounding is parsed per AND-OR list (`a ; b &` backgrounds only `b`); until later it prints a notice and runs in the foreground with the real status. `( )` are rejected as reserved syntax.
@@ -40,7 +40,7 @@ src/builtin_commands/   exit echo help clear type pwd cd
 src/executables/        PATH lookup + external execution
 src/variables/          ENVs, PATHs, lastExitStatus
 src/utils/              split/join, path predicates, expandHome
-tests/run_tests.sh / .ps1   117-assertion integration suite (pipes stdin, checks stdout/stderr/exit)
+tests/run_tests.sh / .ps1   integration suite (pipes stdin, checks stdout/stderr/exit)
 docs/shell-foundations.md   design reference (Brennan lsh + Crafting Interpreters)
 (local, gitignored:) .hermes/ROADMAP.md canonical roadmap, .hermes/DECISIONS.md decision log, docs/
 ```

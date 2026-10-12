@@ -6,12 +6,9 @@
 
 namespace parser {
 
-// One word as written on the command line. `quoteKinds` is parallel to
-// `text` (same length): one QuoteKind code (see token.hpp) per character,
-// recording whether that character was bare, single-quoted, double-quoted
-// or backslash-escaped. `"$X"` expands, `'$X'` does not, so it must survive
-// from the lexer all the way to the executor instead of being dropped
-// when the parser builds the AST.
+// One word as written. `quoteKinds` has one QuoteKind code (token.hpp) per
+// character of `text`. `"$X"` expands and `'$X'` doesn't, so this has to
+// reach the executor.
 struct Word {
     std::string text;
     std::string quoteKinds;
@@ -41,15 +38,8 @@ struct Command {
     std::vector<Redirection> redirections; // parse order preserved
 };
 
-// ---------------------------------------------------------------------
-// Post-expansion form
-//
-// What builtins and externals actually receive: plain strings, with
-// quoting already resolved. The executor builds one of these from each
-// Command immediately before running it — at execution time, not parse
-// time, so that `declare X=1; echo $X` and `false; echo $?` see the state
-// left by the preceding command.
-// ---------------------------------------------------------------------
+// Post-expansion form: plain strings, quoting resolved. Built per command
+// at execution time (not parse time) so `false; echo $?` sees fresh state.
 
 struct ExpandedRedirection {
     int fd = 1;
@@ -64,18 +54,13 @@ struct ExpandedCommand {
 };
 
 // One or more commands connected by '|': `cmd1 | cmd2 | cmd3`. Named to
-// match the POSIX grammar's use of "pipeline" for exactly this — a single
-// command is just a one-stage pipeline.
 struct Pipeline {
     std::vector<Command> commands;
 
     bool isMultiStage() const { return commands.size() > 1; }
 };
 
-// How one pipeline connects to the pipeline that follows it inside the same
-// AndOrList. Lives on the link between two pipelines, not on the pipeline
-// itself — a pipeline doesn't "have" a connector, the gap between two
-// pipelines does.
+// How a pipeline connects to the next one in its AndOrList.
 enum class Connector {
     None, // no pipeline follows (end of the list)
     And,  // &&  (next pipeline runs only if this one succeeded)

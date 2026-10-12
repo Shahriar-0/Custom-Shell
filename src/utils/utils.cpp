@@ -31,8 +31,6 @@ std::string join(const std::vector<std::string>& strings, std::string_view delim
     return result;
 }
 
-// Expands a leading '~' to the user's home directory (USERPROFILE on
-// Windows, HOME elsewhere). Non-home paths pass through unchanged.
 std::string expandHome(std::string_view pattern) {
     if (!isHomePath(pattern)) {
         return std::string(pattern);

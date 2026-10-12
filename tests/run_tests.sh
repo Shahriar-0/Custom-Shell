@@ -1,21 +1,25 @@
 #!/usr/bin/env bash
-# Usage:  tests/run_tests.sh            (uses build/shell.exe)
-#         SHELL_BIN=build/shell_static.exe tests/run_tests.sh
-#
-# Requires the ucrt64 runtime DLLs on PATH (any MSYS shell has them) when
-# testing a Windows build; on Linux/macOS the block below is a no-op.
+# Usage: tests/run_tests.sh
+#        SHELL_BIN=build/shell_static.exe tests/run_tests.sh
+# Defaults to build/shell.exe, or build/shell if that doesn't exist.
 
 set -u
 
-# The exe links ucrt64's runtime DLLs (libstdc++-6 etc.). This harness's bash
-# only has mingw64 on PATH, so add ucrt64 — without it the process dies with
-# 0xC0000139 (STATUS_ENTRYPOINT_NOT_FOUND) and every test would "fail".
+# On Windows the exe needs ucrt64's runtime DLLs on PATH, otherwise it dies
+# with 0xC0000139 and every test fails. No-op elsewhere.
 case ":$PATH:" in
     *":/c/msys64/ucrt64/bin:"*) ;;
     *) [ -d /c/msys64/ucrt64/bin ] && export PATH="/c/msys64/ucrt64/bin:$PATH" ;;
 esac
 
-BIN="${SHELL_BIN:-build/shell.exe}"
+cmake --build build
+if [ -n "${SHELL_BIN:-}" ]; then
+    BIN="$SHELL_BIN"
+elif [ -x build/shell.exe ]; then
+    BIN=build/shell.exe
+else
+    BIN=build/shell
+fi
 if [ ! -x "$BIN" ]; then
     echo "shell binary not found at $BIN — build first (cmake --build build)" >&2
     exit 1
@@ -24,7 +28,7 @@ fi
 pass=0
 fail=0
 
-# run <script> -> sets OUT, ERR, RC for the last line executed
+# run <script>: feeds it to the shell, sets OUT (prompts stripped), ERR, RC, PROMPTS
 run() {
     local tmp
     tmp=$(mktemp)
@@ -37,14 +41,11 @@ run() {
     rm -f "$tmp" "$tmp.out" "$tmp.err"
 }
 
-# check <name> <expected> <actual-value> <where>
-#   where: out (default) | err  -> matched against $OUT / $ERR; $3 is IGNORED
-#          rc                   -> $3 is the real exit status, exact match vs $2
-# NOTE: for out/err the match is always against the captured globals. To
-# compare a transformed value (e.g. normalized paths), assign it to OUT/ERR
-# first — passing it as $3 silently does nothing.
-# An empty <expected> means "nothing at all" and is matched exactly, not as
-# a (trivially-true-for-any-string) empty substring.
+# check <name> <expected> <actual> [out|err|rc]
+#   out (default) / err: substring match against $OUT / $ERR ($3 is ignored)
+#   rc: exact match of $3 against <expected>
+# An empty <expected> means the stream must be empty.
+# To compare a transformed value, assign it to OUT/ERR first.
 check() {
     local name="$1" want="$2" actual="$3" where="${4:-out}" ok=0
     case "$where" in
@@ -68,10 +69,9 @@ check() {
     fi
 }
 
-# checknot <name> <forbidden-substring> [where]
-# Asserts <forbidden-substring> is absent from the given stream (default
-# out). Use this — not check with an empty "want" — whenever the point is
-# "this specific thing must not have run/appeared" alongside other output.
+# checknot <name> <substring> [out|err]
+# Asserts the substring is absent. Use it instead of an empty `check` when
+# other output is expected alongside.
 checknot() {
     local name="$1" forbidden="$2" where="${3:-out}" actual=""
     case "$where" in
@@ -87,16 +87,21 @@ checknot() {
     fi
 }
 
-# norm_path <path> -> path with backslashes turned into forward slashes and
-# lowercased. Needed only for the pwd comparison below: on Windows, MSYS2
-# bash's own `pwd` is POSIX-style (/d/foo/bar) while shell.exe is a native
-# binary using std::filesystem, which prints Windows-style paths
-# (D:\foo\bar) — same directory, different spelling. `pwd -W` (an MSYS2/Git
-# Bash extension) gives bash's own Windows-style form so the two are at
-# least comparable, and normalizing away slash direction and drive-letter
-# case handles the rest. On real POSIX systems `pwd -W` doesn't exist, the
-# `|| pwd` fallback kicks in, and both sides are already identical POSIX
-# paths — normalization is then a harmless no-op.
+# pass_if <name> <command...>: passes when the command succeeds.
+pass_if() {
+    local name="$1"; shift
+    if "$@"; then
+        pass=$((pass+1))
+        printf 'ok   %s\n' "$name"
+    else
+        fail=$((fail+1))
+        printf 'FAIL %s\n' "$name"
+    fi
+}
+
+# norm_path <path>: backslashes to slashes, lowercased. Only used for the pwd
+# test: MSYS bash prints /d/foo, shell.exe prints D:\foo. `pwd -W` gives the
+# Windows form; this smooths over slash direction and drive-letter case.
 norm_path() {
     printf '%s' "$1" | tr '\\' '/' | tr '[:upper:]' '[:lower:]'
 }
@@ -106,18 +111,12 @@ norm_path() {
 run 'echo hello world\n'
 check "echo args"            "hello world" "$OUT"
 
-# Compare against the test runner's own cwd rather than a hardcoded folder
-# name — the shell inherits this process's cwd, but the repo can be checked
-# out anywhere, on any OS. `pwd -W` gives bash's Windows-style form when
-# running under MSYS2/Git Bash (falls back to plain `pwd` elsewhere); both
-# sides are normalized so backslash-vs-forward-slash and drive-letter case
-# don't cause a false failure.
-expected_cwd="$(norm_path "$(pwd -W 2>/dev/null || pwd)")"
+# The shell inherits our cwd, so compare against it. -P because the shell
+# reports the physical path (getcwd), not $PWD.
+expected_cwd="$(norm_path "$(pwd -W 2>/dev/null || pwd -P)")"
 run 'pwd\n'
-# check() matches $OUT verbatim, so normalize the capture in place first — a
-# normalized value passed as $3 would be ignored (see check's NOTE above).
 OUT="$(norm_path "$OUT")"
-check "pwd prints a path"    "$expected_cwd" "$OUT"
+check "pwd prints a cwd"    "$expected_cwd" "$OUT"
 
 run 'type echo\n'
 check "type finds builtin"   "shell builtin" "$OUT"
@@ -149,12 +148,8 @@ run 'echo one ; echo two\n'
 check "semicolon runs both"    "one" "$OUT"
 check "semicolon runs both (2)" "two" "$OUT"
 
-# nosuchcmd_xyz is guaranteed missing (127, a real failure); pwd is a
-# builtin, guaranteed present on every platform and always succeeding (0).
-# Deliberately not using `true`/`false`: those are external binaries that
-# some platforms don't ship on PATH at all and others (e.g. Linux
-# coreutils) do — relying on that made these tests' outcome depend on the
-# OS running them rather than on the shell's own logic.
+# nosuchcmd_xyz always fails (127), pwd always succeeds. Not using
+# true/false: they're external binaries and not on every platform's PATH.
 run 'nosuchcmd_xyz || echo fallback\n'
 check "|| runs after failure"   "fallback" "$OUT"
 
@@ -167,27 +162,19 @@ check "&& skips after failure"  "" "$OUT"
 run 'pwd && echo yes\n'
 check "&& runs after success"   "yes" "$OUT"
 
-# Regression: the connector that decides whether a pipeline runs is the
-# connector coming INTO it (the previous pipeline's), never its own
-# outgoing connector. Getting this backwards makes a shell skip the very
-# first command whenever it's followed by '||' (it checks "succeeded so
-# far" before anything has run), and lets '&&'-guarded commands run when
-# they should have been skipped.
+# Regression: whether a pipeline runs depends on the connector coming into
+# it, not its own trailing one. Mixing that up skips the first command of
+# `a || b`.
 run 'pwd || echo should-not-run\n'
 checknot "first command isn't skipped by its own trailing '||'" "should-not-run"
 
-# cd fails (rc 1) -> the && branch must be skipped; the ; branch always
-# runs regardless. The checknot below is what actually catches a shell
-# that runs both branches unconditionally — the original version of this
-# test only checked that "ran" appeared and never checked that "skipped"
-# didn't, so it passed even when the && branch incorrectly ran too.
+# cd fails, so the && branch is skipped; the ; branch still runs.
 run 'cd /definitely/not/a/real/dir && echo skipped ; echo ran\n'
 check    "connector uses real status: ; always runs"    "ran" "$OUT"
 checknot "connector uses real status: && branch skipped" "skipped"
 
-# Three-link chain false && X || Y: X must be skipped (previous failed);
-# Y must run, because the last *actually executed* command's status (the
-# failure) is what || sees — a skipped command never updates the status.
+# a && X || Y with a failing: X is skipped and || still sees a's failure,
+# because a skipped command doesn't change the status.
 run 'nosuchcmd_xyz && echo skipped2 || echo shown\n'
 check    "&&-then-|| chain: || branch runs"    "shown" "$OUT"
 checknot "&&-then-|| chain: && branch skipped" "skipped2"
@@ -235,8 +222,8 @@ syntax_error_case() {
     run "$script"
     check "$name: message"   "syntax error" "$ERR" err
     check "$name: status 2"  "2" "$RC" rc
-    # REPL survived: a fresh prompt was printed after the error line.
-    # check() only does exact rc matches, so fold ">= 2 prompts" into 2/0.
+    # REPL survived: a second prompt was printed after the error.
+    pass_if "$name: survives" test "${PROMPTS:-0}" -ge 2
     check "$name: survives"  "2" "$(( ${PROMPTS:-0} >= 2 ? 2 : 0 ))" rc
 }
 
@@ -308,11 +295,11 @@ check "2>> is fd 2 append"            "fd 2 >> 'f.txt'" "$ERR" err
 run 'cat 0<in.txt\n'
 check "0< is fd 0"                    "fd 0 < 'in.txt'" "$ERR" err
 
-# A digit word that is NOT touching the operator is an ordinary argument...
+# A digit word not touching the operator is a normal argument...
 run 'echo 2 > f.txt\n'
 check "spaced digit is an argument, not an fd" "fd 1 > 'f.txt'" "$ERR" err
 
-# ...and so is one that is quoted, escaped, or only part of a longer word.
+# ...and so is a quoted, escaped, or embedded one.
 run 'echo "2">f.txt\n'
 check "quoted digit is not an fd"     "fd 1 > 'f.txt'" "$ERR" err
 
@@ -332,8 +319,7 @@ check "leading fd redirection parses" "fd 2 > 'err.txt'" "$ERR" err
 run 'echo a > f.txt b\n'
 check "redirection between args parses" "fd 1 > 'f.txt'" "$ERR" err
 
-# A redirection still counts as "not implemented" when attached to a later
-# pipeline of a && chain (the earlier one runs, status 0, then this stubs).
+# The stub also fires for a later pipeline in a && chain.
 run 'pwd && echo x > f.txt\n'
 check "redirection stub inside && chain" "redirection: not implemented yet" "$ERR" err
 
@@ -353,8 +339,7 @@ run 'exit 1 2\necho still-here\n'
 check "exit refuses extra args"  "too many arguments" "$ERR" err
 check "exit extra args survives" "still-here" "$OUT"
 
-# The whole argument must be an integer ("3abc" is an error, not 3), and the
-# shell does exit, with status 2 — like bash.
+# "3abc" is an error, not 3; the shell exits with 2, like bash.
 run 'exit 3abc\n'
 check "exit rejects trailing junk"   "numeric argument required" "$ERR" err
 check "exit non-numeric status is 2" "2" "$RC" rc
@@ -364,8 +349,7 @@ check "exit rejects non-numeric"     "numeric argument required" "$ERR" err
 
 # ---------- real external execution ----------
 
-# `true` is the closest thing to a universal external; skip where absent
-# rather than failing on platforms that don't ship it.
+# Needs a real external; skip if there's no `true` on PATH.
 if command -v true >/dev/null 2>&1; then
     run 'true\n'
     check "external runs silent"  "" "$OUT"
@@ -375,8 +359,7 @@ else
     printf 'skip: no `true` on PATH\n'
 fi
 
-# Windows-only: bare names resolve via PATHEXT probing. Lookup only, never
-# executed — a bare `cmd` with no args would hang waiting on stdin.
+# Windows: bare names resolve via PATHEXT. Lookup only; a bare cmd would hang on stdin.
 if command -v cmd.exe >/dev/null 2>&1; then
     run 'type cmd\n'
     check "bare Windows name resolves" "cmd.exe" "$OUT"
@@ -401,7 +384,7 @@ printf 'echo bye\n' | "$BIN" >/dev/null 2>&1
 rc=$?
 check "EOF exits with last status" "0" "$rc" rc
 
-# ---------- cleanup any file the redirect test may have created ----------
+# ---------- cleanup ----------
 rm -f f.txt
 
 echo

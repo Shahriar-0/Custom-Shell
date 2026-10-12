@@ -83,9 +83,7 @@ CommandLine Parser::parse() {
     while (true) {
         result.lists.push_back(parseAndOrList());
 
-        // A list ends at ';' or '&' (consumed here), or at end of input.
-        // Nothing else can follow a complete list: '|', '&&' and '||' were
-        // already consumed by the levels below.
+        // A list ends at ';', '&' (consumed here) or end of input.
         if (match(TokenType::Semicolon)) {
             // plain separator
         }
@@ -96,9 +94,7 @@ CommandLine Parser::parse() {
             break;
         }
 
-        // A trailing ';' or '&' is fine ("echo a ;", "sleep 1 &"); anything
-        // else must start another list. A second separator in a row (";;",
-        // "; &", "& ;") fails inside parseCommand as "expected a command".
+        // A trailing ';' or '&' is fine. A second separator in a row fails in parseCommand.
         if (atEnd()) {
             break;
         }
@@ -141,9 +137,7 @@ Pipeline Parser::parsePipeline() {
 
     pipeline.commands.push_back(parseCommand());
     while (match(TokenType::Pipe)) {
-        // Reject "cmd | | cmd2" with a message that names the '|' problem; a
-        // trailing "cmd |" falls through to parseCommand()'s own
-        // "expected a command but found end of input".
+         // Gives "cmd | | cmd2" a clearer message; "cmd |" falls through to parseCommand.
         if (!atEnd() && !check(TokenType::Word) && !atRedirectionStart()) {
             fail("expected a command after '|', found " + describe(peek()),
                  peek().column);
@@ -202,8 +196,7 @@ Redirection Parser::parseRedirection() {
         explicitFd = true;
     }
 
-    // The lexer only emits an IoNumber when a redirection operator follows
-    // it immediately, but check anyway rather than trust that silently.
+    // The lexer guarantees an operator follows an IoNumber; check anyway.
     const Token& op = peek();
     switch (op.type) {
     case TokenType::RedirectOut:

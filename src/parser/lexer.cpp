@@ -87,10 +87,7 @@ private:
         return makeToken(TokenType::Pipe, "|");
     }
 
-    // '&&' is the AND connector; a lone '&' is always emitted as Ampersand.
-    // Whether it is legal where it appears (it must follow a command and
-    // may only be followed by another list or end of line) is the parser's
-    // decision.
+    // '&&' is And; a lone '&' is Ampersand. The parser decides where it's legal.
     Token lexAmpersand() {
         advance();
         if (!atEnd() && peek() == '&') {
@@ -110,7 +107,7 @@ private:
     }
 
     // Scans one word: bare characters, quoted runs, and backslash escapes
-    // may all be mixed freely ("ab"c'd\' becomes abc'd'). 
+    // may all be mixed freely ("ab"c'd\' becomes abc'd').
     Token lexWord() {
         Token tok = makeToken(TokenType::Word);
         tok.column = startColumn_;
@@ -138,10 +135,7 @@ private:
             }
         }
 
-        // A word can only be empty here as "" or '' (lexWord is entered on a
-        // character that is neither whitespace nor an operator, and a bare
-        // character always contributes to the text). Empty quotes are a
-        // legitimate empty argument, so there is nothing to reject.
+        // The word can be empty only as "" or '', which is a valid empty argument.
 
         // `2>file`: digits that are the *entire* word, none of them quoted
         // or escaped, touching a redirection operator, name the fd.
@@ -223,7 +217,7 @@ private:
     }
 
     // Backslash: outside quotes escapes anything; inside double quotes it
-    // escapes only " and \ (POSIX), otherwise the backslash stays literal.
+    // escapes only ", \, $ and `, otherwise the backslash stays literal.
     void lexEscape(Token& tok, bool inDoubleQuotes) {
         size_t escapeColumn = pos_ + 1;
         advance(); // consume backslash
@@ -232,8 +226,7 @@ private:
         }
         char c = peek();
         if (inDoubleQuotes && c != '"' && c != '\\' && c != '$' && c != '`') {
-            // Not a special char: the backslash stays literal, and both it
-            // and the character after it are still inside the double quotes.
+            // Not special: keep the backslash and the character as literals.
             appendChar(tok, '\\', QuoteKind::Double);
             appendChar(tok, c, QuoteKind::Double);
             advance();

@@ -30,11 +30,10 @@ const char* redirOperator(parser::RedirType type) {
     return "?";
 }
 
-// Resolves a parsed Command to plain strings. Today that only means dropping
-// the per-character quote provenance; TODO: replaces the body with real
-// expansion ($VAR, ${VAR}, $?, $$, tilde, ...) driven by Word::quoteKinds.
-// Called once per command, immediately before it runs, so variable state
-// left by earlier commands on the same line is visible.
+// Turns a parsed Command into plain strings. For now this just drops the
+// per-character quote info.
+// TODO: real expansion ($VAR, ${VAR}, $?, $$, ~) driven by Word::quoteKinds.
+// Runs right before each command so earlier commands on the line are visible.
 parser::ExpandedCommand expand(const parser::Command& cmd) {
     parser::ExpandedCommand out;
     out.program = cmd.program.text;
@@ -49,9 +48,8 @@ parser::ExpandedCommand expand(const parser::Command& cmd) {
     return out;
 }
 
-// Runs one simple command (no pipes). Redirections are parsed but not yet.
-//  we refuse to silently ignore them so the
-// user never thinks a redirect succeeded when it didn't.
+// Runs one simple command (no pipes). Redirections aren't applied yet, so
+// refuse them loudly rather than pretend they worked.
 int runCommand(const parser::ExpandedCommand& cmd, bool background) {
     if (!cmd.redirections.empty()) {
         const auto& redir = cmd.redirections.front();
@@ -78,8 +76,7 @@ int runCommand(const parser::ExpandedCommand& cmd, bool background) {
     return kNotFound;
 }
 
-// Runs one pipeline. Multi-stage pipelines (cmd1 | cmd2) are for later; a
-// single command is the common case today.
+// Runs one pipeline. Only single commands for now; cmd1 | cmd2 is stubbed.
 int runPipeline(const parser::Pipeline& pipeline, bool background) {
     if (pipeline.isMultiStage()) {
         reportNotImplemented("pipes",
@@ -90,17 +87,13 @@ int runPipeline(const parser::Pipeline& pipeline, bool background) {
     return runCommand(expand(pipeline.commands.front()), background);
 }
 
-// Walks one AND-OR list left to right with short-circuiting.
+// Runs one AND-OR list left to right with short-circuiting.
 //
-// `incoming` is the connector that led INTO the current link — i.e. the
-// previous link's connectorToNext — not the current link's own
-// connectorToNext, which describes where it leads NEXT. Checking a link's
-// own outgoing connector to decide whether to run it is the classic
-// off-by-one here: it would ask "should the thing after this succeed" while
-// it's actually deciding whether THIS thing runs.
+// `incoming` is the previous link's connectorToNext. Whether a pipeline runs
+// depends on the connector before it, not its own trailing one.
 //
 // A skipped pipeline leaves lastExitStatus alone, so in `a && b || c` with
-// `a` failing, `b` is skipped and `||` still sees `a`'s failure.
+// `a` failing, `||` still sees a's failure.
 void runList(const parser::AndOrList& list) {
     parser::Connector incoming = parser::Connector::None;
 
@@ -118,10 +111,7 @@ void runList(const parser::AndOrList& list) {
 } // namespace
 
 int execute(const parser::CommandLine& line) {
-    // lastExitStatus is deliberately NOT reset here: it is the shell's `$?`,
-    // and must keep the previous line's value until a command actually runs
-    // (the first pipeline of a line always runs, so it is overwritten
-    // immediately in the normal case).
+    // Don't reset lastExitStatus: it's $?, and carries over between lines.
     for (const auto& list : line.lists) {
         runList(list);
     }
