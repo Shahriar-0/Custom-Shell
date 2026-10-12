@@ -1,35 +1,34 @@
 #ifndef PARSER_HPP
 #define PARSER_HPP
 
-#include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "ast.hpp"
+#include "syntax_error.hpp"
 #include "token.hpp"
 
 namespace parser {
 
-struct ParseError {
-    std::string message;
-    size_t column = 0;
-};
-
 // Parses a token stream into a CommandLine.
 //
-// Grammar (left-associative at every level). This flattens ';', '&&' and
-// '||' into one list-with-connectors rather than a nested tree; that's
-// operationally equivalent to POSIX's nested and_or/list grammar for
-// left-to-right execution with short-circuiting, and much simpler to walk:
+// Grammar (follows POSIX's list / and_or / pipeline layering; everything is
+// left-associative, and a trailing separator is allowed):
 //
-//   command_line := pipeline ( (';' | '&&' | '||') pipeline )* ['&']
+//   command_line := list ( (';' | '&') list )* [';' | '&']
+//   list         := pipeline ( ('&&' | '||') pipeline )*
 //   pipeline     := command ('|' command)*
-//   command      := WORD+ redirection*
-//   redirection  := ('>' | '>>' | '<') WORD
+//   command      := ( WORD | redirection )+     -- at least one WORD: the program
+//   redirection  := [IO_NUMBER] ('>' | '>>' | '<') WORD
 //
-// Throws ParseError on malformed input. On success, the returned
-// CommandLine is well-formed: no empty commands, no dangling operators,
-// and every redirection has exactly one filename word.
+// A '&' terminating a list marks just that list as background; ';' only
+// separates. `a && b || c` stays one list, which the executor walks left to
+// right with short-circuiting.
+//
+// Throws SyntaxError on malformed input. On success, the returned
+// CommandLine is well-formed: no empty commands, no dangling && / || / |,
+// and every redirection has exactly one target word.
 class Parser {
 public:
     explicit Parser(std::vector<Token> tokens) : tokens_(std::move(tokens)) {}
@@ -38,7 +37,7 @@ public:
 
 private:
     [[noreturn]] static void fail(const std::string& message, size_t column) {
-        throw ParseError{message, column};
+        throw SyntaxError{message, column};
     }
 
     const Token& peek() const { return tokens_[pos_]; }
@@ -49,6 +48,10 @@ private:
 
     bool atEnd() const { return check(TokenType::EndOfInput); }
 
+    // True if the next token begins a redirection (an optional fd number,
+    // then < > or >>).
+    bool atRedirectionStart() const;
+
     // Consumes the next token if it is `type`; returns nullptr otherwise.
     const Token* match(TokenType type);
 
@@ -56,9 +59,10 @@ private:
 
     void expectWordHere(const std::string& context);
 
+    AndOrList parseAndOrList();
     Pipeline parsePipeline();
     Command parseCommand();
-    Redirection parseRedirection(RedirType type);
+    Redirection parseRedirection();
     Connector parseConnector();
 
     std::vector<Token> tokens_;
