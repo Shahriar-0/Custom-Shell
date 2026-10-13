@@ -1,7 +1,9 @@
 #include "builtin_commands.hpp"
 
 #include <cerrno>
+#include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <format>
 #include <iostream>
@@ -11,6 +13,24 @@
 #include "variables/variables.hpp"
 
 namespace shell_builtin_commands {
+
+namespace {
+
+// Reports a failed write to stdout (`echo hi >&-`) the way bash does and
+// clears the stream so the next prompt still prints. Returns `status`
+// if the write went through.
+int finishOutput(const char* name, int status) {
+    if (std::cout.good()) {
+        return status;
+    }
+    int err = errno;
+    std::cout.clear();
+    std::clearerr(stdout);
+    std::cerr << name << ": write error: " << (err != 0 ? std::strerror(err) : "Input/output error") << "\n";
+    return 1;
+}
+
+} // namespace
 
 const std::unordered_map<std::string, CommandFunction> shell_builtin_cmds = {
     {std::string(EXIT), &shellExit},
@@ -27,8 +47,9 @@ bool shellBuiltinCommandExists(const std::string& command) {
 }
 
 int echo(const parser::ExpandedCommand& cmd) {
+    errno = 0;
     std::cout << utils::join(cmd.args, " ") << "\n";
-    return 0;
+    return finishOutput("echo", 0);
 }
 
 int shellExit(const parser::ExpandedCommand& cmd) {
@@ -58,26 +79,29 @@ int shellExit(const parser::ExpandedCommand& cmd) {
 }
 
 int help(const parser::ExpandedCommand&) {
+    errno = 0;
     std::cout << "Available commands:\n";
     for (const auto& [name, fn] : shell_builtin_cmds) {
         std::cout << "  " << name << "\n";
     }
-    return 0;
+    return finishOutput("help", 0);
 }
 
 int clear(const parser::ExpandedCommand&) {
     // ANSI clear-screen + move cursor home.
+    errno = 0;
     std::cout << "\033[2J\033[H";
-    return 0;
+    return finishOutput("clear", 0);
 }
 
 int type(const parser::ExpandedCommand& cmd) {
     // Resolution order mirrors execution: builtins shadow PATH executables.
     // Like bash, every argument is resolved in turn; the status is nonzero
     // if any of them is not found.
+    errno = 0;
     if (cmd.args.empty()) {
         std::cout << "Usage: type [command]\n";
-        return 1;
+        return finishOutput("type", 1);
     }
 
     int status = 0;
@@ -92,13 +116,17 @@ int type(const parser::ExpandedCommand& cmd) {
             std::cerr << std::format("{}: not found\n", command);
             status = 1;
         }
+        if (!std::cout.good()) {
+            break;
+        }
     }
-    return status;
+    return finishOutput("type", status);
 }
 
 int pwd(const parser::ExpandedCommand&) {
+    errno = 0;
     std::cout << std::filesystem::current_path().string() << "\n";
-    return 0;
+    return finishOutput("pwd", 0);
 }
 
 int cd(const parser::ExpandedCommand& cmd) {
