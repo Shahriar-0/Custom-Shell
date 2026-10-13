@@ -10,10 +10,12 @@
 #include <string>
 #include <vector>
 
+#include "redirect/redirect.hpp"
 #include "utils/utils.hpp"
 #include "variables/variables.hpp"
 
 #ifdef _WIN32
+#include <io.h>
 #include <windows.h>
 #else
 #include <sys/wait.h>
@@ -137,6 +139,33 @@ std::string quoteWindowsArg(const std::string& arg) {
     return out;
 }
 
+// Inheritable duplicates of fds 0-2 for a child, nullptr for a closed one.
+struct StdHandles {
+    HANDLE handle[3] = {};
+
+    ~StdHandles() {
+        for (HANDLE h : handle) {
+            if (h != nullptr) {
+                CloseHandle(h);
+            }
+        }
+    }
+
+    bool capture() {
+        for (int fd = 0; fd < 3; ++fd) {
+            intptr_t os = _get_osfhandle(fd);
+            if (os == -1 || os == -2) {
+                continue;
+            }
+            if (!DuplicateHandle(GetCurrentProcess(), reinterpret_cast<HANDLE>(os),
+                                 GetCurrentProcess(), &handle[fd], 0, TRUE, DUPLICATE_SAME_ACCESS)) {
+                return false;
+            }
+        }
+        return true;
+    }
+};
+
 } // namespace
 
 // Windows has no fork/exec pair, so the whole command line is assembled as
@@ -144,6 +173,10 @@ std::string quoteWindowsArg(const std::string& arg) {
 // path (so `foo` finds foo.cmd / foo.bat the same way `type` reports it,
 // instead of CreateProcess's own .exe-only guessing), and every piece is
 // quoted so the child's CRT splits the line back into exactly these args.
+//
+// Without a fork there is no child to redirect, so the redirections are
+// applied to this process, the child gets the resulting fds 0-2 as its
+// standard handles, and the scope undoes them afterwards.
 int run(const parser::ExpandedCommand& cmd) {
     auto resolved = getExecutablePath(cmd.program);
     if (!resolved.has_value()) {
@@ -165,12 +198,68 @@ int run(const parser::ExpandedCommand& cmd) {
         MultiByteToWideChar(CP_UTF8, 0, cmdLineStr.c_str(), -1, wcmdLine.data(), wlen);
     }
 
-    STARTUPINFOW si{};
-    si.cb = sizeof(STARTUPINFOW);
-    PROCESS_INFORMATION pi{};
+    for (const auto& redir : cmd.redirections) {
+        if (redir.fd > 2) {
+            std::cerr << std::format("myshell: {}: redirecting fd {} is not supported for external commands on Windows\n",
+                                     cmd.program, redir.fd);
+            return 1;
+        }
+    }
 
-    if (!CreateProcessW(nullptr, wcmdLine.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
-        std::cerr << std::format("{}: CreateProcess failed ({}).\n", cmd.program, GetLastError());
+    redirect::Scope redirections;
+    if (!redirections.apply(cmd.redirections)) {
+        return 1;
+    }
+
+    StdHandles childStd;
+    if (!childStd.capture()) {
+        std::cerr << std::format("{}: could not pass standard handles ({}).\n", cmd.program, GetLastError());
+        return 126;
+    }
+
+    // Only the standard handles may be inherited: any other inheritable
+    // handle would leak into the child.
+    HANDLE inheritList[3];
+    DWORD inheritCount = 0;
+    for (HANDLE h : childStd.handle) {
+        if (h != nullptr) {
+            inheritList[inheritCount++] = h;
+        }
+    }
+
+    STARTUPINFOEXW si{};
+    si.StartupInfo.cb = sizeof(STARTUPINFOEXW);
+    si.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+    si.StartupInfo.hStdInput = childStd.handle[0];
+    si.StartupInfo.hStdOutput = childStd.handle[1];
+    si.StartupInfo.hStdError = childStd.handle[2];
+
+    std::vector<char> attributeBuffer;
+    DWORD creationFlags = 0;
+    if (inheritCount > 0) {
+        SIZE_T size = 0;
+        InitializeProcThreadAttributeList(nullptr, 1, 0, &size); // only queries the size
+        attributeBuffer.resize(size);
+        auto* attributes = reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(attributeBuffer.data());
+        if (!InitializeProcThreadAttributeList(attributes, 1, 0, &size) ||
+            !UpdateProcThreadAttribute(attributes, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, inheritList,
+                                       inheritCount * sizeof(HANDLE), nullptr, nullptr)) {
+            std::cerr << std::format("{}: could not set up standard handles ({}).\n", cmd.program, GetLastError());
+            return 126;
+        }
+        si.lpAttributeList = attributes;
+        creationFlags = EXTENDED_STARTUPINFO_PRESENT;
+    }
+
+    PROCESS_INFORMATION pi{};
+    BOOL created = CreateProcessW(nullptr, wcmdLine.data(), nullptr, nullptr, TRUE, creationFlags, nullptr,
+                                  nullptr, &si.StartupInfo, &pi);
+    DWORD createError = GetLastError();
+    if (si.lpAttributeList != nullptr) {
+        DeleteProcThreadAttributeList(si.lpAttributeList);
+    }
+    if (!created) {
+        std::cerr << std::format("{}: CreateProcess failed ({}).\n", cmd.program, createError);
         return 126;
     }
 
@@ -187,11 +276,10 @@ int run(const parser::ExpandedCommand& cmd) {
 
 #else
 
-// POSIX split: fork, then execvp in the child. The exec only returns if it
-// failed; the child reports that and leaves with _exit (not exit: this is a
-// forked copy of the shell, and exit() would run the parent's atexit
-// handlers and static destructors a second time, flushing buffers twice).
-// The parent waits and decodes the status the way bash does.
+// POSIX split: fork, then redirect and execvp in the child, so the shell's own
+// fds are never touched. The exec only returns if it failed; the child
+// reports that and leaves with _exit, since exit() would run the parent's
+// atexit handlers and static destructors a second time.
 int run(const parser::ExpandedCommand& cmd) {
     std::vector<char*> cArgs;
     cArgs.push_back(const_cast<char*>(cmd.program.c_str()));
@@ -202,6 +290,11 @@ int run(const parser::ExpandedCommand& cmd) {
 
     pid_t pid = fork();
     if (pid == 0) {
+        redirect::Scope redirections;
+        if (!redirections.apply(cmd.redirections)) {
+            _exit(1);
+        }
+        redirections.release();
         execvp(cmd.program.c_str(), cArgs.data());
         int err = errno;
         std::cerr << std::format("{}: {}\n", cmd.program, strerror(err));
