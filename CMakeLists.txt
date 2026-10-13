@@ -34,4 +34,5 @@ target_link_libraries(shell PRIVATE executor builtin_commands)
 
 if(WIN32)
     target_link_libraries(shell PRIVATE ws2_32)
+    target_link_options(shell PRIVATE -static)
 endif()
