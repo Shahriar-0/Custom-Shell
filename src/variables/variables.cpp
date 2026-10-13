@@ -23,7 +23,7 @@ void insertPair(std::string_view pair) {
     // empty name (Windows' hidden per-drive "=C:=..." vars).
     size_t eq = pair.find('=');
     if (eq == std::string_view::npos || eq == 0) {
-        return; // skip malformed entries and Windows' "=C:=..." per-drive vars
+        return;
     }
     ENVs.emplace(std::string(pair.substr(0, eq)), std::string(pair.substr(eq + 1)));
 }
