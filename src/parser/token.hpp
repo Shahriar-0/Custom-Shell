@@ -7,17 +7,21 @@
 namespace parser {
 
 enum class TokenType {
-    Word,           // a bare word or quoted string
-    IoNumber,       // digits immediately followed by < or > (the fd in 2>file)
-    Pipe,           // |
-    RedirectOut,    // >
-    RedirectAppend, // >>
-    RedirectIn,     // <
-    And,            // &&
-    Or,             // ||
-    Semicolon,      // ;
-    Ampersand,      // & (background marker / list separator)
-    EndOfInput,     // sentinel: no more tokens
+    Word,               // a bare word or quoted string
+    IoNumber,           // digits immediately followed by < or > (the fd in 2>file)
+    Pipe,               // |
+    RedirectOut,        // >
+    RedirectAppend,     // >>
+    RedirectIn,         // <
+    RedirectDupOut,     // >&
+    RedirectDupIn,      // <&
+    RedirectBoth,       // &>
+    RedirectBothAppend, // &>>
+    And,                // &&
+    Or,                 // ||
+    Semicolon,          // ;
+    Ampersand,          // & (background marker / list separator)
+    EndOfInput,         // sentinel: no more tokens
 };
 
 // Which quoting context each character of a Word token came from.

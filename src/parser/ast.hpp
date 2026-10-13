@@ -18,11 +18,15 @@ enum class RedirType {
     In,     // <
     Out,    // >
     Append, // >>
+    DupOut, // >&  target is an fd number, or "-" to close fd
+    DupIn,  // <&  same
 };
 
-// One redirection. `fd` is the file descriptor being redirected: the explicit
+// One redirection. `fd` is the descriptor being redirected: the explicit
 // IO_NUMBER if one was written (`2>file`), otherwise the operator's default
-// (0 for `<`, 1 for `>` and `>>`).
+// (0 for `<` and `<&`, 1 for the rest). For the dup types `target` is not
+// checked here, since it may come from an expansion later. `&>f` and `&>>f`
+// have no type of their own, the parser lowers them to `>f` + `2>&1`.
 struct Redirection {
     int fd = 1;
     RedirType type = RedirType::Out;
@@ -53,7 +57,7 @@ struct ExpandedCommand {
     std::vector<ExpandedRedirection> redirections;
 };
 
-// One or more commands connected by '|': `cmd1 | cmd2 | cmd3`. Named to
+// One or more commands connected by '|': `cmd1 | cmd2 | cmd3`.
 struct Pipeline {
     std::vector<Command> commands;
 
