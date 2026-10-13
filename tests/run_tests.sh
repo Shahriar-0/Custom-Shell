@@ -12,7 +12,13 @@ case ":$PATH:" in
     *) [ -d /c/msys64/ucrt64/bin ] && export PATH="/c/msys64/ucrt64/bin:$PATH" ;;
 esac
 
-cmake --build build
+# Some tests only make sense on Windows (PATHEXT, handle passing) or only off it.
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*) is_windows=1 ;;
+    *) is_windows=0 ;;
+esac
+
+cmake --build build || exit 1
 if [ -n "${SHELL_BIN:-}" ]; then
     BIN="$SHELL_BIN"
 elif [ -x build/shell.exe ]; then
@@ -43,7 +49,7 @@ run() {
     rm -f "$tmp" "$tmp.out" "$tmp.err"
 }
 
-# check <name> <expected> <actual> [out|err|rc]
+# check <n> <expected> <actual> [out|err|rc]
 #   out (default) / err: substring match against $OUT / $ERR ($3 is ignored)
 #   rc: exact match of $3 against <expected>
 # An empty <expected> means the stream must be empty.
@@ -71,7 +77,7 @@ check() {
     fi
 }
 
-# checknot <name> <substring> [out|err]
+# checknot <n> <substring> [out|err]
 # Asserts the substring is absent. Use it instead of an empty `check` when
 # other output is expected alongside.
 checknot() {
@@ -89,7 +95,7 @@ checknot() {
     fi
 }
 
-# pass_if <name> <command...>: passes when the command succeeds.
+# pass_if <n> <command...>: passes when the command succeeds.
 pass_if() {
     local name="$1"; shift
     if "$@"; then
@@ -143,6 +149,24 @@ check "adjacent quoted segments join"  "mix edx" "$OUT"
 
 run 'echo tab\tsep\n'
 check "tab separates words"            "tab sep" "$OUT"
+
+run 'echo a    b\n'
+check "runs of spaces collapse"        "a b" "$OUT"
+
+run 'echo "q\\"x"\n'
+check "escaped quote inside double quotes" 'q"x' "$OUT"
+
+run 'echo "a\\\\b"\n'
+check "escaped backslash inside double quotes" 'a\b' "$OUT"
+
+run 'echo a#b\n'
+check "# inside a word is not a comment" "a#b" "$OUT"
+
+run 'echo a #c\n'
+checknot "# after whitespace starts a comment" "#c"
+
+run 'echo "#x"\n'
+check "quoted # is literal" "#x" "$OUT"
 
 # ---------- connectors ----------
 
@@ -226,7 +250,6 @@ syntax_error_case() {
     check "$name: status 2"  "2" "$RC" rc
     # REPL survived: a second prompt was printed after the error.
     pass_if "$name: survives" test "${PROMPTS:-0}" -ge 2
-    check "$name: survives"  "2" "$(( ${PROMPTS:-0} >= 2 ? 2 : 0 ))" rc
 }
 
 syntax_error_case "leading pipe"        '| cmd\n'
@@ -284,10 +307,18 @@ cd "$scratch" || exit 1
 
 # file_is <name> <path> <printf format>: byte-exact content check.
 file_is() {
-    pass_if "$1" bash -c 'printf "$2" | cmp -s - "$1"' _ "$2" "$3"
+    local name="$1" path="$2" fmt="$3" got
+    if printf "$fmt" | cmp -s - "$path" 2>/dev/null; then
+        pass=$((pass+1))
+        printf 'ok   %s\n' "$name"
+    else
+        fail=$((fail+1))
+        got=$(cat "$path" 2>&1; printf x)
+        printf 'FAIL %s\n     wanted %q, got %q\n' "$name" "$(printf "$fmt")" "${got%x}"
+    fi
 }
 
-# file_has <name> <path> <substring>
+# file_has <n> <path> <substring>
 file_has() {
     pass_if "$1" grep -qF -- "$3" "$2"
 }
@@ -499,21 +530,101 @@ if command -v sh >/dev/null 2>&1 && command -v cat >/dev/null 2>&1; then
     run "sh -c 'echo x >&10' > lk.txt 2> /dev/null\nexit\n"
     pass_if "saved fds don't leak into children" test "$RC" -ne 0
 
-    case "$(uname -s)" in
-        MINGW*|MSYS*|CYGWIN*)
-            # Only fds 0-2 can be handed to a Windows child.
-            run "sh -c 'echo three >&3' 3> h4.txt\nexit\n"
-            check "external: fd 3 is refused on Windows" "not supported" "$ERR" err
-            check "external: fd 3 refusal is status 1" "1" "$RC" rc
-            ;;
-        *)
-            run "sh -c 'echo three >&3' 3> h4.txt\n"
-            file_is "external can write to fd 3" h4.txt 'three\n'
-            ;;
-    esac
+    # --- running externals: arguments, status, lookup ---
+
+    cat > showargs.sh <<'EOF'
+for a in "$@"; do printf '[%s]' "$a"; done
+EOF
+    run 'sh showargs.sh "a b" "" c\n'
+    check "arguments keep their boundaries" "[a b][][c]" "$OUT"
+
+    run 'sh showargs.sh a\\ b c\n'
+    check "escaped space stays in one argument" "[a b][c]" "$OUT"
+
+    run "sh showargs.sh 'say \"hi\"'\n"
+    check "embedded double quotes survive" '[say "hi"]' "$OUT"
+
+    run "sh showargs.sh 'x\\\\y\\\\'\n"
+    check "backslashes survive, even a trailing one" '[x\y\]' "$OUT"
+
+    run "sh -c 'exit 7'\nexit\n"
+    check "external exit status is passed on" "7" "$RC" rc
+
+    if [ "$is_windows" = 0 ]; then
+        run "sh -c 'kill -9 \$\$'\nexit\n"
+        check "external killed by a signal: 128+N" "137" "$RC" rc
+    fi
+
+    cat_src=$(command -v cat)
+    cat_ext=""
+    [ -f "$cat_src.exe" ] && cat_ext=.exe
+    mkdir -p pdir
+    cp "$cat_src$cat_ext" "pdir/mycat$cat_ext" && chmod +x "pdir/mycat$cat_ext"
+
+    # PATH comes from the environment, so give the shell a different one.
+    OUT=$(printf 'mycat < in1.txt\ntype mycat\n' | PATH="$PWD/pdir:$PATH" "$BIN" 2>&1 | sed 's/\$ //g')
+    check "a command found through PATH runs" "data" "$OUT"
+    check "type shows the PATH hit" "mycat is" "$OUT"
+
+    run './pdir/mycat < in1.txt\n'
+    check "relative path with a slash runs" "data" "$OUT"
+
+    sh_abs=$(cygpath -m "$(command -v sh)" 2>/dev/null || command -v sh)
+    run "$sh_abs -c 'echo viapath'\n"
+    check "absolute path runs" "viapath" "$OUT"
+
+    run './no-such-prog\n'
+    check "missing path: message" "command not found" "$ERR" err
+    check "missing path: status 127" "127" "$RC" rc
+
+    run 'type sh\n'
+    check "type finds an external" "sh is " "$OUT"
+
+    if [ "$is_windows" = 1 ]; then
+        # Only fds 0-2 can be handed to a Windows child.
+        run "sh -c 'echo three >&3' 3> h4.txt\nexit\n"
+        check "external: fd 3 is refused on Windows" "not supported" "$ERR" err
+        check "external: fd 3 refusal is status 1" "1" "$RC" rc
+    else
+        run "sh -c 'echo three >&3' 3> h4.txt\n"
+        file_is "external can write to fd 3" h4.txt 'three\n'
+    fi
 else
     printf 'skip: no sh/cat on PATH, external redirection tests\n'
 fi
+
+# --- cd and ~ (in the scratch dir) ---
+
+mkdir -p cd1/inner
+abs="$(pwd -W 2>/dev/null || pwd -P)"
+
+run 'cd cd1\npwd\n'
+OUT="$(norm_path "$OUT")"
+check "cd into a relative dir" "/cd1" "$OUT"
+
+run 'cd cd1/inner\ncd ..\npwd\n'
+OUT="$(norm_path "$OUT")"
+check "cd .. goes up" "/cd1" "$OUT"
+checknot "cd .. left the inner dir" "inner"
+
+run "cd '$abs/cd1'\npwd\n"
+OUT="$(norm_path "$OUT")"
+check "cd to an absolute path" "/cd1" "$OUT"
+
+run 'cd nosuch-dir\nexit\n'
+check "cd to a missing dir: message" "No such file or directory" "$ERR" err
+check "cd to a missing dir: status 1" "1" "$RC" rc
+
+# Home is HOME on POSIX and USERPROFILE on Windows; set both.
+home_run() {
+    printf '%b' "$1" | HOME="$(pwd -P)" USERPROFILE="$abs" "$BIN" 2>&1 | sed 's/\$ //g'
+}
+OUT="$(norm_path "$(home_run 'cd ~/cd1\npwd\n')")"
+check "~ expands to the home dir" "/cd1" "$OUT"
+
+OUT="$(norm_path "$(home_run 'cd cd1\ncd\npwd\n')")"
+check "bare cd goes home" "$(norm_path "$abs")" "$OUT"
+checknot "bare cd left the previous dir" "cd1"
 
 cd - >/dev/null || exit 1
 rm -rf "$scratch"
@@ -542,6 +653,26 @@ check "exit non-numeric status is 2" "2" "$RC" rc
 run 'exit abc\n'
 check "exit rejects non-numeric"     "numeric argument required" "$ERR" err
 
+run 'exit 256\n'
+check "exit status wraps to 8 bits" "0" "$RC" rc
+
+run 'exit 257\n'
+check "exit 257 wraps to 1" "1" "$RC" rc
+
+run 'exit -1\n'
+check "exit -1 is 255" "255" "$RC" rc
+
+run 'help\n'
+check "help lists echo" "echo" "$OUT"
+check "help lists cd" "cd" "$OUT"
+
+run 'clear\n'
+check "clear sends the ANSI clear sequence" $'\033[2J' "$OUT"
+
+run 'type\n'
+check "type with no args prints usage" "Usage: type" "$OUT"
+check "type with no args: status 1" "1" "$RC" rc
+
 # ---------- real external execution ----------
 
 # Needs a real external; skip if there's no `true` on PATH.
@@ -554,14 +685,17 @@ else
     printf 'skip: no `true` on PATH\n'
 fi
 
-# Windows: bare names resolve via PATHEXT. Lookup only; a bare cmd would hang on stdin.
-if command -v cmd.exe >/dev/null 2>&1; then
-    run 'type cmd\n'
-    check "bare Windows name resolves" "cmd.exe" "$OUT"
-fi
-if command -v hostname >/dev/null 2>&1; then
-    run 'hostname\n'
-    checknot "extensionless lookup works" "command not found" err
+# Windows only: bare names resolve via PATHEXT. `type` is lookup only; running
+# a bare cmd would hang on stdin.
+if [ "$is_windows" = 1 ]; then
+    if command -v cmd.exe >/dev/null 2>&1; then
+        run 'type cmd\n'
+        check "bare Windows name resolves" "cmd.exe" "$OUT"
+    fi
+    if command -v hostname >/dev/null 2>&1; then
+        run 'hostname\n'
+        checknot "extensionless lookup works" "command not found" err
+    fi
 fi
 
 # ---------- exit builtin ----------
