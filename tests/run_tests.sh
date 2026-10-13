@@ -24,6 +24,8 @@ if [ ! -x "$BIN" ]; then
     echo "shell binary not found at $BIN — build first (cmake --build build)" >&2
     exit 1
 fi
+# Absolute, since the redirection tests cd into a scratch dir.
+BIN="$(cd "$(dirname "$BIN")" && pwd)/$(basename "$BIN")"
 
 pass=0
 fail=0
@@ -242,15 +244,19 @@ syntax_error_case "ampersand then semicolon" 'echo a &;\n'
 syntax_error_case "ampersand then ampersand" 'echo a & &\n'
 syntax_error_case "redirect with no command" '> f.txt\n'
 syntax_error_case "fd number out of range" 'echo 9999999999>f.txt\n'
+syntax_error_case "'>&' with no target" 'echo >&\n'
+syntax_error_case "'<&' with no target" 'echo <&\n'
+syntax_error_case "'&>' with no target" 'echo &>\n'
+
+# operators carry their column, too
+run 'echo a | | b\n'
+check "syntax error on an operator reports its column" "(column 10)" "$ERR" err
 
 # error must not kill the session: bad line, then a good one still runs
 run 'bad |||\necho still-alive\n'
 check "REPL continues after error"  "still-alive" "$OUT"
 
 # ---------- parsed-but-not-implemented stubs ----------
-
-run 'echo x > f.txt\n'
-check "redirection reports stub"  "redirection: not implemented yet" "$ERR" err
 
 run 'echo p | wc -l\n'
 check "pipe reports stub"         "pipes: not implemented yet" "$ERR" err
@@ -270,58 +276,247 @@ run 'pwd ; echo bg &\n'
 checknot "& does not touch the earlier list" "'pwd' will run" err
 check    "& applies to the list it ends"     "'echo' will run in the foreground" "$ERR" err
 
-# ---------- redirection parsing: fd numbers and operator placement ----------
-# Redirections aren't applied for now, but the stub message reports the
-# fd and operator the parser attached, so these pin the parse itself.
+# ---------- redirection ----------
 
-run 'echo x > f.txt\n'
-check "'>' defaults to fd 1"          "fd 1 > 'f.txt'" "$ERR" err
+# Runs in a scratch dir (the shell inherits our cwd), cleaned up at the end.
+scratch=$(mktemp -d)
+cd "$scratch" || exit 1
 
-run 'echo x >> f.txt\n'
-check "'>>' defaults to fd 1"         "fd 1 >> 'f.txt'" "$ERR" err
+# file_is <name> <path> <printf format>: byte-exact content check.
+file_is() {
+    pass_if "$1" bash -c 'printf "$2" | cmp -s - "$1"' _ "$2" "$3"
+}
 
-run 'cat < in.txt\n'
-check "'<' defaults to fd 0"          "fd 0 < 'in.txt'" "$ERR" err
+# file_has <name> <path> <substring>
+file_has() {
+    pass_if "$1" grep -qF -- "$3" "$2"
+}
 
-run 'echo x 2> f.txt\n'
-check "2> is fd 2 (spaced target)"    "fd 2 > 'f.txt'" "$ERR" err
+# --- builtins ---
 
-run 'echo x 2>f.txt\n'
-check "2> is fd 2 (attached target)"  "fd 2 > 'f.txt'" "$ERR" err
+run 'echo hello > o1.txt\n'
+file_is "> writes builtin output to the file" o1.txt 'hello\n'
+check "> leaves stdout empty" "" "$OUT"
+check "> leaves stderr empty" "" "$ERR" err
 
-run 'echo x 2>>f.txt\n'
-check "2>> is fd 2 append"            "fd 2 >> 'f.txt'" "$ERR" err
+run 'echo longer-text > o2.txt\necho x > o2.txt\n'
+file_is "> truncates" o2.txt 'x\n'
 
-run 'cat 0<in.txt\n'
-check "0< is fd 0"                    "fd 0 < 'in.txt'" "$ERR" err
+run 'echo a > o3.txt\necho b >> o3.txt\n'
+file_is ">> appends" o3.txt 'a\nb\n'
 
-# A digit word not touching the operator is a normal argument...
-run 'echo 2 > f.txt\n'
-check "spaced digit is an argument, not an fd" "fd 1 > 'f.txt'" "$ERR" err
+run 'echo c >> o4.txt\n'
+file_is ">> creates a missing file" o4.txt 'c\n'
 
-# ...and so is a quoted, escaped, or embedded one.
-run 'echo "2">f.txt\n'
-check "quoted digit is not an fd"     "fd 1 > 'f.txt'" "$ERR" err
+run 'cd /definitely/not/a/real/dir 2> e1.txt\n'
+file_has "2> captures a builtin's stderr" e1.txt 'cd:'
+check "2> leaves the terminal's stderr empty" "" "$ERR" err
 
-run 'echo \\2>f.txt\n'
-check "escaped digit is not an fd"    "fd 1 > 'f.txt'" "$ERR" err
+run 'cd /definitely/not/a/real/dir 2> e2.txt\ncd /another/missing 2>> e2.txt\n'
+file_has "2>> appends stderr" e2.txt '/another/missing'
 
-run 'echo a2>f.txt\n'
-check "digits inside a word are not an fd" "fd 1 > 'f.txt'" "$ERR" err
+run 'echo x > w1.txt > w2.txt\n'
+file_is "last redirection of an fd wins (loser still created)" w1.txt ''
+file_is "last redirection of an fd wins (winner)" w2.txt 'x\n'
 
-# Redirections may come before the command name and between its arguments.
-run '> f.txt echo hi\n'
-check "leading redirection parses"    "fd 1 > 'f.txt'" "$ERR" err
+run 'echo hi > "my file.txt"\n'
+file_is "quoted filename with a space" "my file.txt" 'hi\n'
 
-run '2>err.txt echo hi\n'
-check "leading fd redirection parses" "fd 2 > 'err.txt'" "$ERR" err
+run '> l1.txt echo lead\n'
+file_is "redirection before the command name" l1.txt 'lead\n'
 
-run 'echo a > f.txt b\n'
-check "redirection between args parses" "fd 1 > 'f.txt'" "$ERR" err
+run 'echo a > m1.txt b\n'
+file_is "redirection between arguments" m1.txt 'a b\n'
 
-# The stub also fires for a later pipeline in a && chain.
-run 'pwd && echo x > f.txt\n'
-check "redirection stub inside && chain" "redirection: not implemented yet" "$ERR" err
+run 'echo a > sz.txt\n'
+pass_if "files are byte-exact, no CRLF" test "$(wc -c < sz.txt | tr -d ' ')" = 2
+
+run 'echo hidden-b > r1.txt\necho shown-b\n'
+check "output returns to the terminal afterwards" "shown-b" "$OUT"
+checknot "redirected output doesn't leak to the terminal" "hidden-b"
+
+run 'echo a > r2.txt\necho b > r2.txt\necho c\n'
+check "repeated redirects keep restoring" "c" "$OUT"
+file_is "repeated redirects: file content" r2.txt 'b\n'
+
+run 'echo gone > /dev/null\necho back\n'
+check "/dev/null swallows output" "back" "$OUT"
+checknot "/dev/null: nothing leaks" "gone"
+
+run 'echo a > c1.txt && echo b >> c1.txt\n'
+file_is "redirects inside an && chain" c1.txt 'a\nb\n'
+
+run 'exit 3 > x1.txt\n'
+check "exit with a redirect keeps its code" "3" "$RC" rc
+file_is "exit's redirect target was created" x1.txt ''
+
+run 'echo bg > bg1.txt &\n'
+file_is "redirect on a backgrounded list" bg1.txt 'bg\n'
+
+# --- failures: report, skip the command, status 1, shell stays alive ---
+
+run 'echo xx-ran-xx > nodir/f.txt || echo fallback\n'
+check "unwritable target: || sees the failure" "fallback" "$OUT"
+checknot "unwritable target: command didn't run" "xx-ran-xx"
+check "unwritable target: message names the file" "myshell: nodir/f.txt:" "$ERR" err
+
+run 'echo x > nodir/f.txt && echo skipped-and\n'
+checknot "failed redirect makes && skip" "skipped-and"
+
+run 'echo x > nodir/f.txt\nexit\n'
+check "failed redirect: status 1" "1" "$RC" rc
+
+run 'echo x > fr1.txt 2> nodir/e.txt\necho still-here\n'
+check "failure restores earlier redirects" "still-here" "$OUT"
+file_is "failure keeps files opened before it" fr1.txt ''
+
+# bash reports through the redirections applied so far.
+run 'echo x 2> log1.txt < nodir/in.txt\n'
+file_has "complaint goes to the already-redirected stderr" log1.txt 'nodir/in.txt'
+check "...and not to the terminal" "" "$ERR" err
+
+run 'echo x > .\n'
+check "directory as target is refused" "myshell: .:" "$ERR" err
+
+run 'nosuchcmd_xyz 2> nf1.txt\nexit\n'
+file_has "not-found message follows 2>" nf1.txt 'command not found'
+check "not-found: terminal stderr is empty" "" "$ERR" err
+check "not-found: status 127" "127" "$RC" rc
+
+run 'nosuchcmd_xyz > nf2.txt\n'
+file_is "not-found still creates the > target" nf2.txt ''
+check "not-found with > still complains" "command not found" "$ERR" err
+
+run 'echo hi >&-\necho alive\n'
+check "write to a closed stdout: message" "echo: write error" "$ERR" err
+check "write to a closed stdout: shell recovers" "alive" "$OUT"
+
+run 'echo hi >&-\nexit\n'
+check "write to a closed stdout: status 1" "1" "$RC" rc
+
+# --- duplication: >& <& &> &>> ---
+
+run 'echo toerr >&2\n'
+check "builtin stdout to stderr" "toerr" "$ERR" err
+check "builtin stdout to stderr: stdout empty" "" "$OUT"
+
+run 'cd /definitely/not/a/real/dir > d1.txt 2>&1\n'
+file_has "builtin: > then 2>&1" d1.txt 'cd:'
+check "builtin: > then 2>&1 leaves the terminal quiet" "" "$ERR" err
+
+run 'echo hi &> d2.txt\n'
+file_is "&> works for builtins" d2.txt 'hi\n'
+
+run 'echo a &> d3.txt\necho b &>> d3.txt\n'
+file_is "&>> appends" d3.txt 'a\nb\n'
+
+run 'echo x >&9\nexit\n'
+check "dup from a closed fd: message" "9: Bad file descriptor" "$ERR" err
+check "dup from a closed fd: status 1" "1" "$RC" rc
+
+run 'echo x >&abc\n'
+check "dup target must be a number or '-'" "abc: file descriptor number or '-' expected" "$ERR" err
+
+# fds apply left to right: 3 isn't open yet when >&3 runs.
+run 'echo x >&3 3> h0.txt\n'
+check "dup from an fd opened later fails" "3: Bad file descriptor" "$ERR" err
+
+# Builtins run in the shell, so any fd works. 10 is where the shell starts
+# numbering its own backup copies: a command using 10 must not clobber them.
+run 'echo viaten 10> h1.txt >&10\n'
+file_is "10> then >&10" h1.txt 'viaten\n'
+run 'echo viathree 3> h2.txt >&3\n'
+file_is "3> then >&3" h2.txt 'viathree\n'
+run 'echo a 3> h3.txt >&3\necho b\n'
+check "high fd redirect is undone" "b" "$OUT"
+
+# --- externals (need sh and cat) ---
+
+if command -v sh >/dev/null 2>&1 && command -v cat >/dev/null 2>&1; then
+    run "sh -c 'echo ext' > e3.txt\n"
+    file_is "> works for an external command" e3.txt 'ext\n'
+    check "external > leaves stdout empty" "" "$OUT"
+
+    run "sh -c 'echo oops >&2' 2> e4.txt\n"
+    file_is "2> captures an external's stderr" e4.txt 'oops\n'
+    check "external 2> leaves the terminal's stderr empty" "" "$ERR" err
+
+    run "sh -c 'echo out; echo err >&2' > e5.out 2> e5.err\n"
+    file_is "stdout and stderr to separate files (out)" e5.out 'out\n'
+    file_is "stdout and stderr to separate files (err)" e5.err 'err\n'
+
+    run "sh -c 'echo out; echo err >&2' 2>&1 > e6.txt\n"
+    file_is "2>&1 before >: only stdout in the file" e6.txt 'out\n'
+    # stderr became a copy of the old stdout, which is the terminal's here.
+    check "2>&1 before >: stderr went to the old stdout" "err" "$OUT"
+
+    run "sh -c 'echo out; echo err >&2' > e7.txt 2>&1\n"
+    file_is "> then 2>&1 merges both into the file" e7.txt 'out\nerr\n'
+
+    run "sh -c 'echo viaerr' >&2\n"
+    check "external >&2" "viaerr" "$ERR" err
+
+    run "sh -c 'echo out; echo err >&2' &> e8.txt\n"
+    file_is "&> with an external" e8.txt 'out\nerr\n'
+
+    run "sh -c 'echo x' &> e9.txt\nsh -c 'echo y' &>> e9.txt\n"
+    file_is "&>> appends from an external" e9.txt 'x\ny\n'
+
+    run "sh -c 'echo x' > e10.txt\nsh -c 'echo y' >> e10.txt\n"
+    file_is ">> appends from an external" e10.txt 'x\ny\n'
+
+    run 'echo data > in1.txt\ncat < in1.txt\n'
+    check "< feeds a file to stdin" "data" "$OUT"
+
+    run 'cat 0< in1.txt\n'
+    check "0< is stdin" "data" "$OUT"
+
+    run '< in1.txt cat\n'
+    check "leading < works" "data" "$OUT"
+
+    run 'cat < in1.txt > e11.txt\n'
+    file_is "< and > together" e11.txt 'data\n'
+
+    run 'cat < /dev/null\n'
+    check "/dev/null reads as empty" "" "$OUT"
+
+    run 'sh -c "echo hidden-x" > r3.txt\necho shown-x\n'
+    check "external redirect leaves the shell alone" "shown-x" "$OUT"
+    checknot "external redirect doesn't leak" "hidden-x"
+
+    run 'cat < missing.txt\nexit\n'
+    check "missing input file: message" "myshell: missing.txt:" "$ERR" err
+    check "missing input file: status 1" "1" "$RC" rc
+
+    run "sh -c 'echo xx-ext-xx' > nodir/f.txt\nexit\n"
+    checknot "unwritable target: external didn't run" "xx-ext-xx"
+    check "unwritable target: status 1" "1" "$RC" rc
+
+    run 'cat <&-\nexit\n'
+    pass_if "reading from a closed stdin fails" test "$RC" -ne 0
+
+    # The shell's own backup fds must not leak into the program.
+    run "sh -c 'echo x >&10' > lk.txt 2> /dev/null\nexit\n"
+    pass_if "saved fds don't leak into children" test "$RC" -ne 0
+
+    case "$(uname -s)" in
+        MINGW*|MSYS*|CYGWIN*)
+            # Only fds 0-2 can be handed to a Windows child.
+            run "sh -c 'echo three >&3' 3> h4.txt\nexit\n"
+            check "external: fd 3 is refused on Windows" "not supported" "$ERR" err
+            check "external: fd 3 refusal is status 1" "1" "$RC" rc
+            ;;
+        *)
+            run "sh -c 'echo three >&3' 3> h4.txt\n"
+            file_is "external can write to fd 3" h4.txt 'three\n'
+            ;;
+    esac
+else
+    printf 'skip: no sh/cat on PATH, external redirection tests\n'
+fi
+
+cd - >/dev/null || exit 1
+rm -rf "$scratch"
 
 # ---------- builtin argument edges (bash behavior) ----------
 
@@ -383,9 +578,6 @@ check "bare exit is success"    "0" "$rc" rc
 printf 'echo bye\n' | "$BIN" >/dev/null 2>&1
 rc=$?
 check "EOF exits with last status" "0" "$rc" rc
-
-# ---------- cleanup ----------
-rm -f f.txt
 
 echo
 echo "passed: $pass  failed: $fail"
