@@ -25,6 +25,7 @@ add_subdirectory(${SRC_DIR}/variables)
 add_subdirectory(${SRC_DIR}/executables)
 add_subdirectory(${SRC_DIR}/builtin_commands)
 add_subdirectory(${SRC_DIR}/parser)
+add_subdirectory(${SRC_DIR}/redirect)
 add_subdirectory(${SRC_DIR}/executor)
 
 add_executable(shell ${SRC_DIR}/main.cpp)
