@@ -18,9 +18,9 @@ namespace parser {
 //   - backslash outside quotes escapes the next character
 //   - # starts a comment (rest of line ignored) when unquoted
 //   - an empty quote pair ("" or '') is a real, empty word
-//   - operators: | || && & ; < > >>  (only recognized outside quotes)
+//   - operators: | || && & ; < > >> <& >& &> &>>  (only recognized outside quotes)
 //   - an all-digit, fully unquoted word immediately followed by < or >
-//     is an IoNumber token (the fd in `2>file`); anywhere else it is a Word
+//     is an IoNumber token (the fd in `2>file`, `2>&1`); anywhere else it is a Word
 //   - ( ) are reserved and rejected as syntax errors
 //
 // Throws SyntaxError on unterminated quotes, a trailing backslash, or

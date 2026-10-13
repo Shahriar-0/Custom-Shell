@@ -44,6 +44,10 @@ bool Parser::atRedirectionStart() const {
     case TokenType::RedirectIn:
     case TokenType::RedirectOut:
     case TokenType::RedirectAppend:
+    case TokenType::RedirectDupOut:
+    case TokenType::RedirectDupIn:
+    case TokenType::RedirectBoth:
+    case TokenType::RedirectBothAppend:
         return true;
     default:
         return false;
@@ -167,13 +171,14 @@ Command Parser::parseCommand() {
             }
         }
         else if (atRedirectionStart()) {
-            cmd.redirections.push_back(parseRedirection());
+            parseRedirection(cmd.redirections);
         }
         else {
             break;
         }
     }
 
+    // TODO: allow commands made only of redirections (`> f`).
     if (!haveProgram) {
         const Token& tok = peek();
         fail("expected a command but found " + describe(tok), tok.column);
@@ -181,8 +186,9 @@ Command Parser::parseCommand() {
     return cmd;
 }
 
-// redirection := [IO_NUMBER] ('>' | '>>' | '<') WORD
-Redirection Parser::parseRedirection() {
+// redirection := [IO_NUMBER] ('>' | '>>' | '<' | '>&' | '<&') WORD
+//             |  ('&>' | '&>>') WORD
+void Parser::parseRedirection(std::vector<Redirection>& out) {
     Redirection redir;
     bool explicitFd = false;
 
@@ -197,7 +203,8 @@ Redirection Parser::parseRedirection() {
     }
 
     // The lexer guarantees an operator follows an IoNumber; check anyway.
-    const Token& op = peek();
+    const Token op = advance();
+    bool bothStreams = false;
     switch (op.type) {
     case TokenType::RedirectOut:
         redir.type = RedirType::Out;
@@ -208,20 +215,35 @@ Redirection Parser::parseRedirection() {
     case TokenType::RedirectIn:
         redir.type = RedirType::In;
         break;
+    case TokenType::RedirectDupOut:
+        redir.type = RedirType::DupOut;
+        break;
+    case TokenType::RedirectDupIn:
+        redir.type = RedirType::DupIn;
+        break;
+    case TokenType::RedirectBoth:
+        redir.type = RedirType::Out;
+        bothStreams = true;
+        break;
+    case TokenType::RedirectBothAppend:
+        redir.type = RedirType::Append;
+        bothStreams = true;
+        break;
     default:
         fail("expected a redirection operator but found " + describe(op), op.column);
     }
-    advance(); // consume operator
 
     if (!explicitFd) {
-        redir.fd = (redir.type == RedirType::In) ? 0 : 1;
+        redir.fd = (redir.type == RedirType::In || redir.type == RedirType::DupIn) ? 0 : 1;
     }
 
-    expectWordHere(redir.type == RedirType::Append ? "'>>'"
-                   : redir.type == RedirType::Out  ? "'>'"
-                                                   : "'<'");
+    expectWordHere("'" + op.text + "'");
     redir.target = toWord(advance());
-    return redir;
+    out.push_back(std::move(redir));
+
+    if (bothStreams) {
+        out.push_back({2, RedirType::DupOut, Word{"1", std::string(1, static_cast<char>(QuoteKind::None))}});
+    }
 }
 
 CommandLine parseLine(std::string_view input) {

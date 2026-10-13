@@ -20,7 +20,8 @@ namespace parser {
 //   list         := pipeline ( ('&&' | '||') pipeline )*
 //   pipeline     := command ('|' command)*
 //   command      := ( WORD | redirection )+     -- at least one WORD: the program
-//   redirection  := [IO_NUMBER] ('>' | '>>' | '<') WORD
+//   redirection  := [IO_NUMBER] ('>' | '>>' | '<' | '>&' | '<&') WORD
+//                |  ('&>' | '&>>') WORD
 //
 // A '&' terminating a list marks just that list as background; ';' only
 // separates. `a && b || c` stays one list, which the executor walks left to
@@ -48,8 +49,7 @@ private:
 
     bool atEnd() const { return check(TokenType::EndOfInput); }
 
-    // True if the next token begins a redirection (an optional fd number,
-    // then < > or >>).
+    // True if the next token begins a redirection.
     bool atRedirectionStart() const;
 
     // Consumes the next token if it is `type`; returns nullptr otherwise.
@@ -62,7 +62,8 @@ private:
     AndOrList parseAndOrList();
     Pipeline parsePipeline();
     Command parseCommand();
-    Redirection parseRedirection();
+    // Appends one entry to `out`, or two for `&>` and `&>>`.
+    void parseRedirection(std::vector<Redirection>& out);
     Connector parseConnector();
 
     std::vector<Token> tokens_;

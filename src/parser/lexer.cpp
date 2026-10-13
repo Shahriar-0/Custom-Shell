@@ -12,12 +12,13 @@ public:
         std::vector<Token> tokens;
         while (true) {
             Token tok = next();
+            tok.column = startColumn_;
             if (tok.type == TokenType::EndOfInput) {
                 break;
             }
             tokens.push_back(std::move(tok));
         }
-        tokens.push_back(makeToken(TokenType::EndOfInput));
+        tokens.push_back(makeToken(TokenType::EndOfInput, "", startColumn_));
         return tokens;
     }
 
@@ -63,9 +64,7 @@ private:
         case ';':
             advance();
             return makeToken(TokenType::Semicolon, ";");
-        case '<':
-            advance();
-            return makeToken(TokenType::RedirectIn, "<");
+        case '<': return lexRedirectIn();
         case '>': return lexRedirectOut();
         case '(':
         case ')':
@@ -87,12 +86,21 @@ private:
         return makeToken(TokenType::Pipe, "|");
     }
 
-    // '&&' is And; a lone '&' is Ampersand. The parser decides where it's legal.
+    // '&&' is And, '&>' and '&>>' redirect both streams, a lone '&' is
+    // Ampersand. The parser decides where a lone '&' is legal.
     Token lexAmpersand() {
         advance();
         if (!atEnd() && peek() == '&') {
             advance();
             return makeToken(TokenType::And, "&&");
+        }
+        if (!atEnd() && peek() == '>') {
+            advance();
+            if (!atEnd() && peek() == '>') {
+                advance();
+                return makeToken(TokenType::RedirectBothAppend, "&>>");
+            }
+            return makeToken(TokenType::RedirectBoth, "&>");
         }
         return makeToken(TokenType::Ampersand, "&");
     }
@@ -103,14 +111,26 @@ private:
             advance();
             return makeToken(TokenType::RedirectAppend, ">>");
         }
+        if (!atEnd() && peek() == '&') {
+            advance();
+            return makeToken(TokenType::RedirectDupOut, ">&");
+        }
         return makeToken(TokenType::RedirectOut, ">");
+    }
+
+    Token lexRedirectIn() {
+        advance();
+        if (!atEnd() && peek() == '&') {
+            advance();
+            return makeToken(TokenType::RedirectDupIn, "<&");
+        }
+        return makeToken(TokenType::RedirectIn, "<");
     }
 
     // Scans one word: bare characters, quoted runs, and backslash escapes
     // may all be mixed freely ("ab"c'd\' becomes abc'd').
     Token lexWord() {
         Token tok = makeToken(TokenType::Word);
-        tok.column = startColumn_;
 
         while (!atEnd()) {
             char c = peek();
