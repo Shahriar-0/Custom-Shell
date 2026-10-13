@@ -16,6 +16,7 @@ target_link_libraries(executor
     parser
     builtin_commands
     executables
+    redirect
     variables
 )
 

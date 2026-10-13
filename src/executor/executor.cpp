@@ -5,6 +5,7 @@
 
 #include "builtin_commands/builtin_commands.hpp"
 #include "executables/executables.hpp"
+#include "redirect/redirect.hpp"
 #include "variables/variables.hpp"
 
 namespace executor {
@@ -13,26 +14,17 @@ namespace {
 
 constexpr int kNotImplemented = 2;
 constexpr int kNotFound = 127;
+constexpr int kRedirectionFailed = 1;
 
 void reportNotImplemented(const std::string& feature, const std::string& detail) {
     std::cerr << feature << ": not implemented yet (" << detail << ")\n";
 }
 
-const char* redirOperator(parser::RedirType type) {
-    switch (type) {
-    case parser::RedirType::In:
-        return "<";
-    case parser::RedirType::Append:
-        return ">>";
-    case parser::RedirType::Out:
-        return ">";
-    }
-    return "?";
-}
-
 // Turns a parsed Command into plain strings. For now this just drops the
 // per-character quote info.
 // TODO: real expansion ($VAR, ${VAR}, $?, $$, ~) driven by Word::quoteKinds.
+// Redirection targets too: one that expands to no word, or to several, is an
+// "ambiguous redirect" error.
 // Runs right before each command so earlier commands on the line are visible.
 parser::ExpandedCommand expand(const parser::Command& cmd) {
     parser::ExpandedCommand out;
@@ -48,29 +40,31 @@ parser::ExpandedCommand expand(const parser::Command& cmd) {
     return out;
 }
 
-// Runs one simple command (no pipes). Redirections aren't applied yet, so
-// refuse them loudly rather than pretend they worked.
+// Runs one simple command (no pipes). A failed redirection means the command
+// doesn't run and the status is 1.
 int runCommand(const parser::ExpandedCommand& cmd, bool background) {
-    if (!cmd.redirections.empty()) {
-        const auto& redir = cmd.redirections.front();
-        reportNotImplemented("redirection",
-                             "fd " + std::to_string(redir.fd) + " " +
-                                 redirOperator(redir.type) + " '" + redir.filename +
-                                 "' was parsed but not applied");
-        return kNotImplemented;
-    }
     if (background) {
         reportNotImplemented("backgrounding",
                              "'" + cmd.program + "' will run in the foreground");
         // fall through and run in foreground for now
     }
 
-    if (auto it = shell_builtin_commands::shell_builtin_cmds.find(cmd.program);
-        it != shell_builtin_commands::shell_builtin_cmds.end()) {
-        return it->second(cmd);
-    }
-    if (executables::commandExists(cmd.program)) {
+    const auto builtin = shell_builtin_commands::shell_builtin_cmds.find(cmd.program);
+    const bool isBuiltin = builtin != shell_builtin_commands::shell_builtin_cmds.end();
+
+    // Externals redirect their own child.
+    if (!isBuiltin && executables::commandExists(cmd.program)) {
         return executables::run(cmd);
+    }
+
+    // Builtins run in this process, so redirect it. The not-found message
+    // goes through the redirections like any other output.
+    redirect::Scope redirections;
+    if (!redirections.apply(cmd.redirections)) {
+        return kRedirectionFailed;
+    }
+    if (isBuiltin) {
+        return builtin->second(cmd);
     }
     std::cerr << cmd.program << ": command not found\n";
     return kNotFound;
