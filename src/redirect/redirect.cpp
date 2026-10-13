@@ -92,10 +92,12 @@ int errnoFromWin32(DWORD error) {
     }
 }
 
-// Uses CreateFileW instead of _wopen so that ">>" gets FILE_APPEND_DATA
-// access. A child process only inherits the OS handle, and the CRT's
-// _O_APPEND is just a seek the CRT does itself before each of its own
-// writes, so a child would overwrite from offset 0.
+// Uses CreateFileW instead of _wopen so that ">>" can hand the child a
+// handle that already sits at the end of the file. A child only inherits the
+// OS handle, and the CRT's _O_APPEND is just a seek the CRT does itself
+// before its own writes. The handle keeps full write access, not only
+// FILE_APPEND_DATA, because some programs (the MSYS runtime, apparently)
+// treat a handle without FILE_WRITE_DATA as read-only.
 int openFile(const std::string& path, parser::RedirType type) {
     const std::string name = (path == "/dev/null") ? "NUL" : path;
     int wlen = MultiByteToWideChar(CP_UTF8, 0, name.c_str(), -1, nullptr, 0);
@@ -116,7 +118,6 @@ int openFile(const std::string& path, parser::RedirType type) {
         crtFlags |= _O_RDONLY;
         break;
     case parser::RedirType::Append:
-        access = FILE_APPEND_DATA;
         disposition = OPEN_ALWAYS;
         crtFlags |= _O_APPEND;
         break;
@@ -127,8 +128,10 @@ int openFile(const std::string& path, parser::RedirType type) {
     HANDLE handle = CreateFileW(wide.c_str(), access,
                                 FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                                 nullptr, disposition, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (handle == INVALID_HANDLE_VALUE) {
+    if (type == parser::RedirType::Append &&
+        !SetFilePointerEx(handle, LARGE_INTEGER{}, nullptr, FILE_END)) {
         errno = errnoFromWin32(GetLastError());
+        CloseHandle(handle);
         return -1;
     }
     int fd = _open_osfhandle(reinterpret_cast<intptr_t>(handle), crtFlags);

@@ -18,7 +18,7 @@ case "$(uname -s)" in
     *) is_windows=0 ;;
 esac
 
-cmake --build build || exit 1
+cmake --build build
 if [ -n "${SHELL_BIN:-}" ]; then
     BIN="$SHELL_BIN"
 elif [ -x build/shell.exe ]; then
