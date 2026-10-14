@@ -294,10 +294,13 @@ int run(const parser::ExpandedCommand& cmd) {
         if (!redirections.apply(cmd.redirections)) {
             _exit(1);
         }
-        redirections.release();
+        // There is no need to clear the saved redirected fds here because:
+        // 1. The process image is replaced, so Scope::~Scope() never runs.
+        //    The backup descriptors have FD_CLOEXEC, so the OS closes them automatically.
         execvp(cmd.program.c_str(), cArgs.data());
         int err = errno;
         std::cerr << std::format("{}: {}\n", cmd.program, strerror(err));
+        // 2. _exit() doesn't run C++ destructors and closes the process's file descriptors.
         _exit(err == ENOENT ? 127 : 126);
     }
     if (pid > 0) {

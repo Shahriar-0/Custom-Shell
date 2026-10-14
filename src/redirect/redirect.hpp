@@ -23,9 +23,6 @@ public:
     // so far, like bash), restores the table and returns false.
     bool apply(const std::vector<parser::ExpandedRedirection>& redirections);
 
-    // Keeps the redirected table. For a forked child that is about to exec.
-    void release();
-
     void restore();
 
 private:

@@ -319,15 +319,6 @@ bool Scope::apply(const std::vector<parser::ExpandedRedirection>& redirections) 
     return true;
 }
 
-void Scope::release() {
-    for (const auto& s : saved_) {
-        if (s.copy >= 0) {
-            sysClose(s.copy);
-        }
-    }
-    saved_.clear();
-}
-
 void Scope::restore() {
     if (saved_.empty()) {
         return;
