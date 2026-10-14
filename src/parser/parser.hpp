@@ -19,7 +19,7 @@ namespace parser {
 //   command_line := list ( (';' | '&') list )* [';' | '&']
 //   list         := pipeline ( ('&&' | '||') pipeline )*
 //   pipeline     := command ('|' command)*
-//   command      := ( WORD | redirection )+     -- at least one WORD: the program
+//   command      := ( WORD | redirection )+    -- at least one WORD(the program): (WORD|redirection)+WORD(WORD|redirection)+
 //   redirection  := [IO_NUMBER] ('>' | '>>' | '<' | '>&' | '<&') WORD
 //                |  ('&>' | '&>>') WORD
 //
@@ -56,8 +56,7 @@ private:
     const Token* match(TokenType type);
 
     const Token& expect(TokenType type, const std::string& what);
-
-    void expectWordHere(const std::string& context);
+    void expectWithoutAdvancing(TokenType type, const std::string& what) const;
 
     AndOrList parseAndOrList();
     Pipeline parsePipeline();

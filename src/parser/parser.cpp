@@ -54,11 +54,10 @@ bool Parser::atRedirectionStart() const {
     }
 }
 
-void Parser::expectWordHere(const std::string& context) {
-    if (!check(TokenType::Word)) {
+void Parser::expectWithoutAdvancing(TokenType type, const std::string& what) const {
+    if (!check(type)) {
         const Token& tok = peek();
-        fail("expected a word after " + context + ", found " + describe(tok),
-             tok.column);
+        fail("expected " + what + " but found " + describe(tok), tok.column);
     }
 }
 
@@ -237,7 +236,7 @@ void Parser::parseRedirection(std::vector<Redirection>& out) {
         redir.fd = (redir.type == RedirType::In || redir.type == RedirType::DupIn) ? 0 : 1;
     }
 
-    expectWordHere("'" + op.text + "'");
+    expectWithoutAdvancing(TokenType::Word, "a filename or file descriptor");
     redir.target = toWord(advance());
     out.push_back(std::move(redir));
 

@@ -30,6 +30,23 @@ int finishOutput(const char* name, int status) {
     return 1;
 }
 
+// Expands a leading '~' to the user's home directory (USERPROFILE on
+// Windows, HOME elsewhere). Non-home paths pass through unchanged.
+std::string expandHome(std::string_view pattern) {
+    if (!utils::isHomePath(pattern)) {
+        return std::string(pattern);
+    }
+#ifdef _WIN32
+    const char* home = std::getenv("USERPROFILE");
+#else
+    const char* home = std::getenv("HOME");
+#endif
+    if (home == nullptr) {
+        return std::string(pattern);
+    }
+    return std::string(home) + std::string(pattern.substr(1));
+}
+
 } // namespace
 
 const std::unordered_map<std::string, CommandFunction> shell_builtin_cmds = {
@@ -138,7 +155,7 @@ int cd(const parser::ExpandedCommand& cmd) {
     }
     std::string target = cmd.args.empty() ? "~" : cmd.args[0];
 
-    target = utils::expandHome(target);
+    target = expandHome(target);
     if (utils::isHomePath(target)) {
         std::cerr << "cd: HOME not set\n";
         return 1;

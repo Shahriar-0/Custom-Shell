@@ -31,21 +31,6 @@ std::string join(const std::vector<std::string>& strings, std::string_view delim
     return result;
 }
 
-std::string expandHome(std::string_view pattern) {
-    if (!isHomePath(pattern)) {
-        return std::string(pattern);
-    }
-#ifdef _WIN32
-    const char* home = std::getenv("USERPROFILE");
-#else
-    const char* home = std::getenv("HOME");
-#endif
-    if (home == nullptr) {
-        return std::string(pattern);
-    }
-    return std::string(home) + std::string(pattern.substr(1));
-}
-
 bool fileExists(const std::filesystem::path& path) {
     return std::filesystem::exists(path);
 }

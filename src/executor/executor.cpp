@@ -20,9 +20,9 @@ void reportNotImplemented(const std::string& feature, const std::string& detail)
     std::cerr << feature << ": not implemented yet (" << detail << ")\n";
 }
 
-// Turns a parsed Command into plain strings. For now this just drops the
-// per-character quote info.
-// TODO: real expansion ($VAR, ${VAR}, $?, $$, ~) driven by Word::quoteKinds.
+// TODO: For now this just drops per-character quote info.
+// the real expansion ($VAR, ${VAR}, $?, $$, ~) driven by Word::quoteKinds.
+// Turns a parsed Command into plain strings.
 // Redirection targets too: one that expands to no word, or to several, is an
 // "ambiguous redirect" error.
 // Runs right before each command so earlier commands on the line are visible.
@@ -81,13 +81,9 @@ int runPipeline(const parser::Pipeline& pipeline, bool background) {
     return runCommand(expand(pipeline.commands.front()), background);
 }
 
-// Runs one AND-OR list left to right with short-circuiting.
-//
-// `incoming` is the previous link's connectorToNext. Whether a pipeline runs
-// depends on the connector before it, not its own trailing one.
-//
-// A skipped pipeline leaves lastExitStatus alone, so in `a && b || c` with
-// `a` failing, `||` still sees a's failure.
+// `incoming` is the previous link's connectorToNext. Whether a
+// pipeline runs depends on the connector before it, not its own
+// trailing one. A skipped pipeline leaves lastExitStatus alone.
 void runList(const parser::AndOrList& list) {
     parser::Connector incoming = parser::Connector::None;
 
@@ -105,7 +101,6 @@ void runList(const parser::AndOrList& list) {
 } // namespace
 
 int execute(const parser::CommandLine& line) {
-    // Don't reset lastExitStatus: it's $?, and carries over between lines.
     for (const auto& list : line.lists) {
         runList(list);
     }

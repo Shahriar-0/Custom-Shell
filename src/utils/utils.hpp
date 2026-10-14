@@ -17,10 +17,6 @@ bool isRelativePath(std::string_view path);
 bool isAbsolutePath(std::string_view path);
 bool isHomePath(std::string_view path);
 
-// Expands a leading '~' to the user's home directory (USERPROFILE on
-// Windows, HOME elsewhere). Non-home paths pass through unchanged.
-std::string expandHome(std::string_view pattern);
-
 } // namespace utils
 
 #endif
