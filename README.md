@@ -1,16 +1,14 @@
 # Custom Shell
 
-A custom POSIX-style shell in C++23 (CMake build → `build/shell.exe`), portable across Windows and POSIX via `#ifdef`. Currently: lexer → recursive-descent parser → executor, with quoting, `;`/`&&`/`||` chaining, I/O redirection, a few builtins, and an integration suite in `tests/`.
+A custom POSIX-style shell in C++23 (CMake build → `build/shell.exe`), portable across Windows and POSIX. 
 
 ## Build & run
 
 ```sh
-cmake -B build            # existing cache: Unix Makefiles, ucrt64 g++
+cmake -B build   
 cmake --build build
 printf 'echo hi\nexit\n' | ./build/shell.exe
 ```
-
-<!-- > **Windows note:** the exe links ucrt64 runtime DLLs, so `C:\msys64\ucrt64\bin` must be on `PATH` at runtime or it dies with `0xC0000139`. Any MSYS shell has it; from PowerShell/cmd prepend it first. In MSYS bash that's `export PATH="/c/msys64/ucrt64/bin:$PATH"` (POSIX form — the `C:...` form doesn't resolve in bash). -->
 
 Tests (no WSL needed — the `.ps1` uses MSYS2 bash under the hood):
 
